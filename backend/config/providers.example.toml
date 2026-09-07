@@ -1,0 +1,11 @@
+schema_version = "provider-config.v1"
+
+[[providers]]
+provider_id = "northstar_demo"
+display_name = "Northstar Demo"
+endpoint = "https://api.example.com/v1/chat/completions"
+protocol = "openai-chat-completions"
+credential_ref = "env:NORTHSTAR_API_KEY"
+adapter = "openai-compatible"
+default_model = "gpt-5.2"
+timeout_ms = 30000

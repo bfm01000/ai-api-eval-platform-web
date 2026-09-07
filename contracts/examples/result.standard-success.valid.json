@@ -1,0 +1,61 @@
+{
+  "contract_version": "performance-result.v1",
+  "result_id": "res_01JTEST0003",
+  "status": "succeeded",
+  "request_snapshot": {
+    "contract_version": "performance-request.v1",
+    "request_id": "req_01JTEST0003",
+    "run_id": "run_01JTEST0001",
+    "sample_index": 3,
+    "provider": {
+      "provider_id": "northstar_demo",
+      "endpoint": "https://api.example.com/v1/chat/completions",
+      "protocol": "openai-chat-completions",
+      "credential_ref": "env:NORTHSTAR_API_KEY",
+      "adapter": "openai-compatible"
+    },
+    "model": "gpt-5.2",
+    "mode": "standard",
+    "timeout_ms": 30000,
+    "input": { "messages": [{ "role": "user", "content": "Return the word ready." }] },
+    "parameters": { "temperature": 0, "max_output_tokens": 32 },
+    "metadata": { "test_case_id": "latency-standard-v1", "tags": ["smoke", "standard"] },
+    "created_at": "2026-09-05T06:04:00Z"
+  },
+  "execution": {
+    "attempt": 1,
+    "worker_id": "worker-local-01",
+    "worker_version": "0.1.0",
+    "adapter_version": "openai-compatible@0.1.0",
+    "started_at": "2026-09-05T06:04:01.000Z",
+    "completed_at": "2026-09-05T06:04:01.920Z"
+  },
+  "timing": {
+    "duration_clock": "monotonic",
+    "dns_completed_ms": null,
+    "connect_completed_ms": null,
+    "tls_completed_ms": null,
+    "response_headers_ms": 302.5,
+    "first_byte_ms": 310.1,
+    "first_content_ms": null,
+    "response_completed_ms": 920.0
+  },
+  "raw_response": {
+    "http_status": 200,
+    "provider_request_id": "provider-request-demo-003",
+    "headers": { "content-type": "application/json" },
+    "media_type": "application/json",
+    "body_text": "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"ready\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":12,\"completion_tokens\":1,\"total_tokens\":13}}",
+    "body_sha256": "2eb068c4cf3274d1fbe37e299f5aa3ba6926fd04fb499d57668d2176ceb45c79",
+    "bytes_received": 156,
+    "credential_redacted": false,
+    "truncated": false
+  },
+  "usage": {
+    "source": "provider",
+    "input_tokens": 12,
+    "output_tokens": 1,
+    "total_tokens": 13
+  },
+  "error": null
+}

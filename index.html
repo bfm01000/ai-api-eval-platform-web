@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="AI API 服务质量检测与评估平台界面原型" />
+    <title>API 观测台</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <a class="brand" href="#overview" aria-label="API 观测台首页">
+          <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span><strong>API 观测台</strong><small>质量评测与决策</small></span>
+        </a>
+
+        <nav class="primary-nav" aria-label="主要导航">
+          <p class="nav-label">工作台</p>
+          <a class="nav-item active" href="#overview" data-section="overview"><span aria-hidden="true">◫</span>评测总览</a>
+          <a class="nav-item" href="#runs" data-section="runs"><span aria-hidden="true">▶</span>检测任务</a>
+          <a class="nav-item" href="#providers" data-section="providers"><span aria-hidden="true">⌁</span>服务商</a>
+          <p class="nav-label">研究与决策</p>
+          <button class="nav-item locked" type="button" data-toast="Benchmark 将在 Phase 3 开放"><span aria-hidden="true">◇</span>能力评测 <small>规划中</small></button>
+          <button class="nav-item locked" type="button" data-toast="行为一致性研究将在 Phase 5 开放"><span aria-hidden="true">◎</span>行为一致性 <small>研究中</small></button>
+          <button class="nav-item locked" type="button" data-toast="综合评分将在指标稳定后开放"><span aria-hidden="true">≋</span>综合评分 <small>规划中</small></button>
+        </nav>
+
+        <div class="sidebar-footer">
+          <span class="phase-dot" aria-hidden="true"></span>
+          <div><strong>Phase 0</strong><small>架构与产品原型</small></div>
+        </div>
+      </aside>
+
+      <main class="main-content">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">AI API 服务质量</p>
+            <h1>评测总览</h1>
+          </div>
+          <div class="topbar-actions">
+            <span class="demo-badge"><span></span>演示数据</span>
+            <button class="secondary-button" type="button" id="exportButton">导出报告</button>
+          </div>
+        </header>
+
+        <section class="notice" aria-label="原型说明">
+          <div><strong>产品界面原型</strong><span>当前数据用于验证工作流和信息结构，不代表真实 API 测量。</span></div>
+          <button type="button" id="dismissNotice" aria-label="关闭说明">×</button>
+        </section>
+
+        <section id="overview" class="section-block" aria-labelledby="overview-title">
+          <div class="section-heading">
+            <div><h2 id="overview-title">线路健康概览</h2><p>最近 24 小时 · 3 个演示 Provider</p></div>
+            <div class="segmented" role="group" aria-label="时间范围">
+              <button type="button" data-range="1h">1 小时</button>
+              <button class="active" type="button" data-range="24h">24 小时</button>
+              <button type="button" data-range="7d">7 天</button>
+            </div>
+          </div>
+
+          <div class="metric-grid">
+            <article class="metric-card"><div class="metric-label"><span>成功率</span><em class="good">正常</em></div><strong id="successMetric">99.42%</strong><p><span class="up">↑ 0.18%</span> 对比上一周期</p></article>
+            <article class="metric-card"><div class="metric-label"><span>P95 总延迟</span><em>目标 &lt; 3s</em></div><strong id="latencyMetric">2.18s</strong><p><span class="up">↓ 240ms</span> 响应更快</p></article>
+            <article class="metric-card"><div class="metric-label"><span>P50 TTFT</span><em>Streaming</em></div><strong id="ttftMetric">428ms</strong><p><span class="down">↑ 36ms</span> 略有波动</p></article>
+            <article class="metric-card"><div class="metric-label"><span>输出速度</span><em>中位数</em></div><strong id="speedMetric">62.4<small> tok/s</small></strong><p><span class="up">↑ 4.8</span> 对比上一周期</p></article>
+          </div>
+
+          <div class="dashboard-grid">
+            <section class="chart-panel" aria-labelledby="trend-title">
+              <div class="panel-heading">
+                <div><h3 id="trend-title">延迟趋势</h3><p id="trendSubtitle">每 4 小时聚合 · 毫秒</p></div>
+                <div class="legend"><span><i class="line-blue"></i>P50</span><span><i class="line-coral"></i>P95</span></div>
+              </div>
+              <div class="chart-wrap">
+                <svg id="latencyChart" viewBox="0 0 720 250" role="img" aria-label="过去 24 小时 P50 和 P95 延迟趋势图">
+                  <g class="grid-lines"><line x1="54" y1="28" x2="698" y2="28"/><line x1="54" y1="87" x2="698" y2="87"/><line x1="54" y1="146" x2="698" y2="146"/><line x1="54" y1="205" x2="698" y2="205"/></g>
+                  <g class="y-labels"><text x="8" y="33">3000</text><text x="8" y="92">2000</text><text x="8" y="151">1000</text><text x="29" y="210">0</text></g>
+                  <path id="p95Area" class="area" d="M54 70 L161 79 L269 64 L376 92 L483 84 L591 62 L698 76 L698 205 L54 205 Z"/>
+                  <polyline id="p95Line" class="p95-line" points="54,70 161,79 269,64 376,92 483,84 591,62 698,76"/>
+                  <polyline id="p50Line" class="p50-line" points="54,151 161,158 269,148 376,165 483,159 591,145 698,154"/>
+                  <g class="x-labels"><text x="46" y="235">00:00</text><text x="153" y="235">04:00</text><text x="261" y="235">08:00</text><text x="368" y="235">12:00</text><text x="475" y="235">16:00</text><text x="583" y="235">20:00</text><text x="678" y="235">现在</text></g>
+                </svg>
+              </div>
+            </section>
+
+            <section class="run-panel" aria-labelledby="run-title">
+              <div class="panel-heading"><div><h3 id="run-title">发起检测</h3><p>模拟单线路性能检测</p></div><span class="status-pill" id="runStatus">就绪</span></div>
+              <form id="runForm">
+                <label>Provider<select id="providerSelect" name="provider"><option value="北辰线路">北辰线路</option><option value="云桥 API">云桥 API</option><option value="Vertex Relay">Vertex Relay</option></select></label>
+                <label>模型<select id="modelSelect" name="model"><option>gpt-5.2</option><option>claude-sonnet-4.5</option><option>gemini-2.5-pro</option></select></label>
+                <label class="full-field">Endpoint<input id="endpointInput" name="endpoint" type="url" value="https://api.example.com/v1" required /></label>
+                <div class="form-row"><label>请求次数<input id="requestCount" name="count" type="number" min="1" max="20" value="5" /></label><label>模式<select id="modeSelect" name="mode"><option value="stream">Streaming</option><option value="standard">普通请求</option></select></label></div>
+                <div class="cost-line"><span>预计请求</span><strong id="costEstimate">5 次 · 约 1 分钟</strong></div>
+                <button class="primary-button" type="submit" id="runButton"><span class="button-icon" aria-hidden="true">▶</span><span>运行演示检测</span></button>
+                <div class="progress-track" id="progressTrack" hidden><span id="progressBar"></span></div>
+              </form>
+            </section>
+          </div>
+        </section>
+
+        <section id="providers" class="section-block table-section" aria-labelledby="providers-title">
+          <div class="section-heading"><div><h2 id="providers-title">Provider 对比</h2><p>相同模型与测试口径下的演示结果</p></div><button class="text-button" type="button" data-toast="Provider 管理将在 Phase 2 开放">管理 Provider</button></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Provider</th><th>状态</th><th>成功率</th><th>P50</th><th>P95</th><th>TTFT</th><th>Tokens/s</th><th>最近检测</th></tr></thead>
+              <tbody id="providerRows"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="runs" class="section-block table-section" aria-labelledby="runs-title">
+          <div class="section-heading"><div><h2 id="runs-title">最近检测任务</h2><p>运行状态、测试口径与结果追踪</p></div><div class="run-filter"><label for="runFilter">筛选</label><select id="runFilter"><option value="all">全部状态</option><option value="completed">已完成</option><option value="running">运行中</option><option value="failed">失败</option></select></div></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>任务</th><th>Provider / 模型</th><th>模式</th><th>样本</th><th>状态</th><th>开始时间</th><th><span class="sr-only">操作</span></th></tr></thead>
+              <tbody id="runRows"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <footer class="page-footer"><span>API 观测台 · Phase 0 原型</span><span>数据口径版本 demo-v1</span></footer>
+      </main>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <dialog id="reportDialog">
+      <div class="dialog-heading"><div><p class="eyebrow">检测报告</p><h2 id="dialogTitle">任务详情</h2></div><button id="closeDialog" type="button" aria-label="关闭">×</button></div>
+      <div id="dialogContent" class="report-content"></div>
+      <div class="dialog-footer"><span>演示数据 · 不代表真实 API 测量</span><button class="secondary-button" id="dialogDone" type="button">完成</button></div>
+    </dialog>
+
+    <script src="app.js"></script>
+  </body>
+</html>

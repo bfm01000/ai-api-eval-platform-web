@@ -1,0 +1,17 @@
+.DS_Store
+.env
+.env.*
+!.env.example
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+backend/config/providers.toml
+
+# Runtime data may contain prompts, responses, endpoints, or usage metadata.
+data/
+logs/
+tmp/

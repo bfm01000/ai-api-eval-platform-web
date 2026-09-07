@@ -1,0 +1,69 @@
+{
+  "contract_version": "performance-result.v1",
+  "result_id": "res_01JTEST0002",
+  "status": "failed",
+  "request_snapshot": {
+    "contract_version": "performance-request.v1",
+    "request_id": "req_01JTEST0002",
+    "run_id": "run_01JTEST0001",
+    "sample_index": 2,
+    "provider": {
+      "provider_id": "northstar_demo",
+      "endpoint": "https://api.example.com/v1/chat/completions",
+      "protocol": "openai-chat-completions",
+      "credential_ref": "env:NORTHSTAR_API_KEY",
+      "adapter": "openai-compatible"
+    },
+    "model": "gpt-5.2",
+    "mode": "streaming",
+    "timeout_ms": 5000,
+    "input": { "messages": [{ "role": "user", "content": "Return the word ready." }] },
+    "parameters": { "temperature": 0, "max_output_tokens": 32 },
+    "metadata": { "test_case_id": "timeout-smoke-v1", "tags": ["timeout"] },
+    "created_at": "2026-09-05T06:03:00Z"
+  },
+  "execution": {
+    "attempt": 1,
+    "worker_id": "worker-local-01",
+    "worker_version": "0.1.0",
+    "adapter_version": "openai-compatible@0.1.0",
+    "started_at": "2026-09-05T06:03:01.000Z",
+    "completed_at": "2026-09-05T06:03:06.012Z"
+  },
+  "timing": {
+    "duration_clock": "monotonic",
+    "dns_completed_ms": 11.8,
+    "connect_completed_ms": 35.5,
+    "tls_completed_ms": 70.3,
+    "response_headers_ms": null,
+    "first_byte_ms": null,
+    "first_content_ms": null,
+    "response_completed_ms": 5012.2
+  },
+  "raw_response": {
+    "http_status": null,
+    "provider_request_id": null,
+    "headers": {},
+    "media_type": null,
+    "body_text": null,
+    "body_sha256": null,
+    "bytes_received": 0,
+    "credential_redacted": false,
+    "truncated": false
+  },
+  "usage": {
+    "source": "unavailable",
+    "input_tokens": null,
+    "output_tokens": null,
+    "total_tokens": null
+  },
+  "error": {
+    "category": "timeout",
+    "code": "TIMEOUT.RESPONSE_HEADERS",
+    "phase": "response_headers",
+    "message": "Timed out before response headers were received.",
+    "retryable": true,
+    "http_status": null,
+    "provider_code": null
+  }
+}

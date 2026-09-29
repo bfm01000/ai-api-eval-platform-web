@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="AI API 服务质量检测与评估平台界面原型" />
     <title>API 观测台</title>
+    <link rel="icon" href="data:," />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
@@ -28,7 +29,7 @@
 
         <div class="sidebar-footer">
           <span class="phase-dot" aria-hidden="true"></span>
-          <div><strong>Phase 0</strong><small>架构与产品原型</small></div>
+          <div><strong>Phase 1</strong><small>Performance MVP</small></div>
         </div>
       </aside>
 
@@ -44,8 +45,8 @@
           </div>
         </header>
 
-        <section class="notice" aria-label="原型说明">
-          <div><strong>产品界面原型</strong><span>当前数据用于验证工作流和信息结构，不代表真实 API 测量。</span></div>
+        <section class="notice" aria-label="数据说明">
+          <div><strong>数据说明</strong><span id="dataNotice">图表与历史列表仍为演示数据；本地 Provider 测试只在本机启用。</span></div>
           <button type="button" id="dismissNotice" aria-label="关闭说明">×</button>
         </section>
 
@@ -84,16 +85,23 @@
               </div>
             </section>
 
-            <section class="run-panel" aria-labelledby="run-title">
-              <div class="panel-heading"><div><h3 id="run-title">发起检测</h3><p>模拟单线路性能检测</p></div><span class="status-pill" id="runStatus">就绪</span></div>
+            <section class="run-panel" aria-labelledby="runTitle">
+              <div class="panel-heading"><div><h3 id="runTitle">发起检测</h3><p id="runDescription">单次真实 API 连通与生成测试</p></div><span class="status-pill" id="runStatus">加载中</span></div>
               <form id="runForm">
-                <label>Provider<select id="providerSelect" name="provider"><option value="北辰线路">北辰线路</option><option value="云桥 API">云桥 API</option><option value="Vertex Relay">Vertex Relay</option></select></label>
-                <label>模型<select id="modelSelect" name="model"><option>gpt-5.2</option><option>claude-sonnet-4.5</option><option>gemini-2.5-pro</option></select></label>
-                <label class="full-field">Endpoint<input id="endpointInput" name="endpoint" type="url" value="https://api.example.com/v1" required /></label>
-                <div class="form-row"><label>请求次数<input id="requestCount" name="count" type="number" min="1" max="20" value="5" /></label><label>模式<select id="modeSelect" name="mode"><option value="stream">Streaming</option><option value="standard">普通请求</option></select></label></div>
-                <div class="cost-line"><span>预计请求</span><strong id="costEstimate">5 次 · 约 1 分钟</strong></div>
-                <button class="primary-button" type="submit" id="runButton"><span class="button-icon" aria-hidden="true">▶</span><span>运行演示检测</span></button>
+                <label>Provider<select id="providerSelect" name="provider" disabled><option>正在加载...</option></select></label>
+                <label>模型<input id="modelInput" name="model" type="text" required disabled /></label>
+                <label class="full-field">Endpoint<input id="endpointInput" name="endpoint" type="url" required readonly /></label>
+                <label class="full-field" id="apiKeyField" hidden>你的 API Key<input id="apiKeyInput" name="api_key" type="password" autocomplete="off" spellcheck="false" /></label>
+                <div class="form-row"><label>请求次数<input type="number" value="1" readonly /></label><label>模式<select id="modeSelect" name="mode"><option value="standard">普通请求</option><option value="streaming">Streaming</option></select></label></div>
+                <div class="cost-line"><span>单次测试</span><strong>最多 16 output tokens</strong></div>
+                <button class="primary-button" type="submit" id="runButton" disabled><span class="button-icon" aria-hidden="true">▶</span><span>运行真实测试</span></button>
                 <div class="progress-track" id="progressTrack" hidden><span id="progressBar"></span></div>
+                <div class="test-result" id="testResult" hidden aria-live="polite">
+                  <div><span>总延迟</span><strong id="testLatency">-</strong></div>
+                  <div><span>TTFT</span><strong id="testTtft">-</strong></div>
+                  <div><span>Token Usage</span><strong id="testUsage">-</strong></div>
+                  <p id="testResponse"></p>
+                </div>
               </form>
             </section>
           </div>
@@ -119,7 +127,7 @@
           </div>
         </section>
 
-        <footer class="page-footer"><span>API 观测台 · Phase 0 原型</span><span>数据口径版本 demo-v1</span></footer>
+        <footer class="page-footer"><span>API 观测台 · Phase 1</span><span>单次 Provider 测试已接入</span></footer>
       </main>
     </div>
 
@@ -127,7 +135,7 @@
     <dialog id="reportDialog">
       <div class="dialog-heading"><div><p class="eyebrow">检测报告</p><h2 id="dialogTitle">任务详情</h2></div><button id="closeDialog" type="button" aria-label="关闭">×</button></div>
       <div id="dialogContent" class="report-content"></div>
-      <div class="dialog-footer"><span>演示数据 · 不代表真实 API 测量</span><button class="secondary-button" id="dialogDone" type="button">完成</button></div>
+      <div class="dialog-footer"><span id="dialogFootnote">演示数据 · 不代表真实 API 测量</span><button class="secondary-button" id="dialogDone" type="button">完成</button></div>
     </dialog>
 
     <script src="app.js"></script>

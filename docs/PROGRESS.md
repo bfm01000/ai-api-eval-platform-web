@@ -1,8 +1,8 @@
 # Current Status
 
-Current Phase: Phase 1 - 单 Provider Performance MVP  
-Current Task: P1-T04 - 请求开始、响应结束与总延迟  
-Status: Completed
+Current Phase: Phase 1 - 单 Provider Performance MVP
+Current Task: P1-T09 - 顺序重复测试执行器
+Status: In Progress
 
 # Completed
 
@@ -35,6 +35,20 @@ Status: Completed
 - 在普通请求成功及 timeout、connect、HTTP、Provider、parse、protocol 错误上统一挂载计时结果
 - 将总延迟固定为请求开始到完整响应体返回或传输失败的 `response_completed_ms`
 - 使用可控时钟证明 10 秒墙钟差不影响 250.25 ms 单调耗时，并拒绝负单调耗时
+- 实现增量 SSE 解析器（多行 data、注释、CRLF、跨 chunk 不完整事件保留）与流式状态累积
+- 实现流式 Chat Completions 请求（`stream=true` + `stream_options.include_usage`）、增量 UTF-8 解码与 `[DONE]` 追踪
+- 固定首个有效内容口径：角色声明、空白 delta、usage-only、keepalive、注释均不计 TTFT，仅非空文本 delta 触发首内容打点
+- 为流式实现首内容单调时钟打点、`generation_duration_ms` 与 `tokens_per_second`（usage 与 TTFT 齐全且生成耗时为正时）
+- 覆盖流式错误路径：非 2xx、流中 timeout / 断连、无效 JSON chunk、无 `[DONE]`、无内容、非 UTF-8，并保留截断的原始流文本
+- 在真实 loopback TCP 流式服务上验证 TTFT 语义、内容拼装、Usage 提取、字节数与哈希
+- 固定 Usage 口径：Provider 未提供时保持 unavailable（null），不用 0 代替未知
+- 固定 Tokens/s 口径：以 `generation_duration_ms` 为窗口，usage 缺失、TTFT 缺失或生成耗时非正时为 null；output_tokens 为 0 时按契约计算为 0.0
+- 实现 adapter 结果 / 错误到 performance-result.v1 文档的契约化构建，含 ULID 式时间排序 ID、execution / timing / raw / usage / error 全块映射
+- 实现 SQLite 原始结果存储：`document_json` 为事实源，派生索引列覆盖 run / sample / status / category / provider / model / mode / 总延迟 / TTFT
+- 在写入前用 JSON Schema Draft 2020-12（含跨文件 `$ref` 与 format 断言）验证结果文档，违反契约即拒绝落库
+- 建立 Git 忽略的本地测试凭证文件与 Provider 配置，保留两个已验证有效的外部测试线路
+- 新增 Provider 列表与单次真实测试 API，由后端托管现有仪表盘，浏览器不接触凭证值
+- 将“发起检测”从模拟计时改为真实普通 / Streaming 请求，展示总延迟、TTFT、Usage 和响应摘要
 
 # In Progress
 
@@ -42,7 +56,7 @@ Status: Completed
 
 # Next
 
-**P1-T05：实现流式请求和首个有效内容事件识别。**
+**P1-T09：实现按样本计划顺序执行重复请求的执行器。**
 
 # Blockers
 
@@ -54,7 +68,7 @@ Status: Completed
 - “运行检测”仅模拟前端状态流转，不代表 Phase 1 已实现
 - Benchmark、行为一致性与综合评分按路线图处于未开放状态
 - 当前 Provider 配置仅支持 `env:` 凭证引用；Secret Manager 留待规模化阶段
-- 非流式 Adapter 尚未使用用户的外部 Provider、模型和凭证完成烟雾测试
+- 外部 Provider 仅完成 `gpt-5.5` 单次短请求烟雾测试，不能代表长期稳定性或性能分布
 - `max_output_tokens -> max_tokens` 是当前通用映射；特定 Provider 方言尚未实现
 - HTTPX 当前未提供可直接持久化的 DNS、Connect、TLS、响应头和首字节分段时间，不能从总延迟反推
 
@@ -62,7 +76,111 @@ Status: Completed
 
 执行：`uv run pytest -W error`、`uv run ruff check .`、`uv run ruff format --check .`、`uv lock --check`、`uv run python ../scripts/verify_contract.py`，并解析全部契约 JSON。
 
-结果：**PASS**。23 个测试零警告通过；真实 loopback HTTP 请求与计时验证成功；可控时钟和错误计时测试通过；Ruff 检查与格式检查通过；锁文件一致；v1 Schema 与全部契约样例通过。
+结果：**PASS**。81 个测试零警告通过；Provider 列表、真实测试 API、凭证隔离、静态页面托管、契约文档构建与 SQLite 持久化均有覆盖；Ruff 检查与格式检查通过；锁文件一致；v1 Schema 与全部契约样例通过。浏览器端对 YLAI Test 和 AIComing Test 的 `gpt-5.5` 普通请求均返回 `OK`。
+
+## 2026-09-27 23:04
+
+### Goal
+
+将已验证有效的测试 Key 安全接入本地网站，并允许用户选择一个 Provider 发起真实测试。
+
+### Changes
+
+从原始 Key 清单中提取两个有效凭证到 Git 忽略且权限为 600 的 `backend/.env`；新增 Git 忽略的 `backend/config/providers.toml`，只保存 Provider 元数据和环境变量引用。FastAPI 新增 Provider 列表与单次测试接口，并显式托管前端资源；网页从后端加载 YLAI Test / AIComing Test，支持模型覆盖和普通 / Streaming 模式，显示总延迟、TTFT、Token Usage、响应或安全错误信息。API 与页面均不返回凭证值。
+
+### Verification
+
+运行 81 个后端测试并将 warning 视为 error，执行 Ruff、格式、锁文件和完整契约验证；测试覆盖 Provider 元数据响应不含凭证、真实 Adapter 请求构造和静态首页。启动真实 Uvicorn 后在浏览器依次选择两个 Provider：YLAI Test 总延迟约 2.12 秒，AIComing Test 约 3.74 秒，均使用 `gpt-5.5` 返回 `OK`，Usage 均为 11 / 5 / 16。
+
+### Result
+
+PASS。网站可以选择两个有效测试线路并完成真实单次生成；本地凭证文件和 Provider 配置均被 Git 忽略，密钥未进入前端响应、测试输出或版本控制。
+
+### Discovery
+
+Pydantic Settings 只读取已声明字段，动态 Provider 凭证不会仅因存在 `.env` 就自动进入 `os.environ`；应用现显式加载本地 `.env` 并让进程环境变量覆盖同名值。单次延迟波动明显，只能作为连通性烟雾测试，不能替代 P1-T09 / P1-T10 的重复样本统计。
+
+### Next
+
+P1-T09：完成按样本计划顺序执行重复请求的执行器，并接入当前测试入口。
+
+## 2026-09-20 23:05
+
+### Goal
+
+完成 P1-T08：把请求快照与原始结果按 performance-result.v1 契约持久化到 SQLite。
+
+### Changes
+
+新增 `results.py`：时间排序 ID 生成（`前缀 + 26 字符 Crockford base32`，48 位毫秒时间戳 + 80 位随机）；`build_request_snapshot` 固化请求快照（endpoint、协议、`credential_ref` 引用、模型、模式、超时、消息、参数、创建时间）；`build_success_document` / `build_failure_document` / `build_cancelled_document` 完成 execution / timing / raw_response / usage / error 全块映射。失败且无 HTTP 响应时按契约 fixture 口径置 raw 块全 null、`bytes_received=0`；失败 / 取消一律 `usage.source=unavailable`；分段计时（DNS / 连接 / TLS / 响应头 / 首字节）HTTPX 未暴露，诚实置 null。新增 `storage.py`：stdlib sqlite3，runs / results 两表，`document_json` 为事实源并派生查询索引列；写入前用 JSON Schema Draft 2020-12 验证器（跨文件 `$ref` registry + format checker）校验，违规抛 `ContractViolationError`；DB 默认落在 gitignored 的 `backend/data/`；外键约束开启，未知 run 拒绝插入。`ProviderCallError` 补充结构化 `message` 属性供契约错误块映射。
+
+### Verification
+
+运行 72 个后端测试并将 warning 视为 error；新增 17 个测试：ID 模式与时间戳单调、快照 Zulu 时间与引用边界、标准 / 流式成功文档契约校验、无响应 timeout 与 401 Provider 失败映射、取消文档、往返读写、派生列、缺失键 / 成功带错误 / 取消类别错误拒绝、外键与已关闭存储拒绝；以凭证字面量全文断言不出现在任何序列化文档；执行 Ruff、格式、锁文件与完整契约验证。
+
+### Result
+
+PASS。契约文档构建与持久化链路按 performance-result.v1 与 PERFORMANCE_CONTRACT.md §3 口径落地；密钥与凭证值不进入落库文档。外部 Provider 未测试，存储层未经过真实供应商数据检验。
+
+### Discovery
+
+契约 schema 的跨文件 `$ref` 需要 referencing registry 按 `$id` URI 注册两份 schema；jsonschema 的 format 断言（date-time / uri）需显式启用 `FORMAT_CHECKER`。失败样本的部分 Usage 不可信，统一按 unavailable 记录比"尽力解析"更符合 Raw Data 原则。
+
+### Next
+
+P1-T09：实现按样本计划顺序执行重复请求的执行器。
+
+## 2026-09-20 22:10
+
+### Goal
+
+完成 P1-T07：记录 input/output tokens，固定 Tokens/s 口径。
+
+### Changes
+
+为普通与流式补齐 Usage 缺失路径断言；`tokens_per_second` 移除 output_tokens 正数前置条件，严格对齐 PERFORMANCE_CONTRACT.md §4：usage 与 `first_content_ms` 均存在且 `generation_duration_ms > 0` 即计算（0 输出按 0.0 记录），否则为 null。
+
+### Verification
+
+运行 55 个后端测试并将 warning 视为 error；新增 5 个 Usage/Tokens/s 测试覆盖：普通与流式无 Usage 时保持 unavailable、生成耗时为 0 时 Tokens/s 为 null、输出 0 tokens 时为 0.0、500 ms 总延迟中 100 ms 生成窗口得到 40.0 Tokens/s；执行 Ruff、格式、锁文件与完整契约验证。
+
+### Result
+
+PASS。Tokens/s 只由生成窗口决定，不由总延迟反推；Provider 未返回 Usage 时不虚构计数。
+
+### Discovery
+
+Adapter 内部曾额外要求 `output_tokens > 0` 才计算 Tokens/s，与契约文档字面口径不一致；以文档为准修正，零输出样本按 0.0 记录而非 null。
+
+### Next
+
+P1-T08：持久化请求参数、原始响应、时间点、Usage 和错误。
+
+## 2026-09-20 21:40
+
+### Goal
+
+完成 P1-T05 / P1-T06：实现流式请求、首个有效内容事件识别与 TTFT 计时语义。
+
+### Changes
+
+新增增量 SSE 解析模块（事件块扫描、多行 data 拼接、注释与 CRLF 处理、不完整事件原文保留）；`RequestTimer` 增加单次首内容单调时钟打点，`RequestTiming` 增加 `first_content_ms` 与 `generation_duration_ms`；OpenAI-compatible Adapter 增加 `complete_streaming`，含增量 UTF-8 解码、`stream_options.include_usage`、首个非空文本 delta 打点、`[DONE]` 追踪与截断原始流保留；错误分类扩展 `internal` 类别与阶段以与契约枚举一致。
+
+### Verification
+
+运行 50 个后端测试并将 warning 视为 error；用可控时钟断言 TTFT 100 ms / 总延迟 300 ms / Tokens/s 20.0 的精确口径；用真实 loopback SSE 服务验证首内容前 50 ms 延迟、内容拼装、Usage 提取、字节数与 SHA-256；覆盖非 2xx、流中 timeout、断连、无效 JSON chunk、无 `[DONE]`、无内容、非 UTF-8 与首内容规则（角色声明、空白 delta、usage-only、keepalive 均不计 TTFT）；执行 Ruff、格式、锁文件与完整契约验证。
+
+### Result
+
+PASS。流式成功与全部错误路径按预期处理；密钥不出现在结果序列化或异常中。外部 Provider 未测试，因此不声称真实供应商已通过流式验证。
+
+### Discovery
+
+FakeClock 测试最初误给角色声明 / 空白 delta 分配了时钟推进——它们不消耗单调时钟，只有首内容打点和完成打点消耗；测试假值已按真实消费顺序修正。SSE 事件按字节 chunk 到达时可能跨事件分割，解析器必须基于原始文本块扫描而非按行状态机，否则不完整事件的行前缀会丢失。
+
+### Next
+
+P1-T07：固定 Token Usage 与 Tokens/s 计算口径。
 
 ## 2026-09-06 16:37
 

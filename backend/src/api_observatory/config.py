@@ -34,6 +34,7 @@ class AppSettings(BaseSettings):
 
     provider_config_path: Path = Path("config/providers.toml")
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
+    public_mode: bool = True
 
 
 class ProviderDefinition(BaseModel):

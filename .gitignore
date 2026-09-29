@@ -10,6 +10,7 @@ __pycache__/
 .coverage
 htmlcov/
 backend/config/providers.toml
+api-key
 
 # Runtime data may contain prompts, responses, endpoints, or usage metadata.
 data/

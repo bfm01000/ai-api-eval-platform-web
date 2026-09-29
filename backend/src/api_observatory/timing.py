@@ -19,6 +19,10 @@ class SystemClock:
         return time.perf_counter_ns()
 
 
+def _elapsed_ms(since_ns: int, now_ns: int) -> float:
+    return round((now_ns - since_ns) / 1_000_000, 3)
+
+
 class RequestTiming(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -26,15 +30,30 @@ class RequestTiming(BaseModel):
     request_started_at: AwareDatetime
     response_completed_at: AwareDatetime
     response_completed_ms: float = Field(ge=0)
+    first_content_ms: float | None = Field(default=None, ge=0)
 
     @field_validator("request_started_at", "response_completed_at")
     @classmethod
     def normalize_utc(cls, value: datetime) -> datetime:
         return value.astimezone(UTC)
 
+    @field_validator("first_content_ms")
+    @classmethod
+    def first_content_not_after_completion(cls, value: float | None, info) -> float | None:
+        completed = info.data.get("response_completed_ms")
+        if value is not None and completed is not None and value > completed:
+            raise ValueError("first_content_ms must not exceed response_completed_ms")
+        return value
+
     @property
     def total_latency_ms(self) -> float:
         return self.response_completed_ms
+
+    @property
+    def generation_duration_ms(self) -> float | None:
+        if self.first_content_ms is None:
+            return None
+        return round(self.response_completed_ms - self.first_content_ms, 3)
 
 
 class RequestTimer:
@@ -48,6 +67,7 @@ class RequestTimer:
         self._clock = clock
         self._request_started_at = request_started_at
         self._started_ns = started_ns
+        self._first_content_ms: float | None = None
         self._finished = False
 
     @classmethod
@@ -59,6 +79,15 @@ class RequestTimer:
             request_started_at=request_started_at,
             started_ns=started_ns,
         )
+
+    def record_first_content(self) -> float:
+        if self._finished:
+            raise RuntimeError("Request timer has already been finished.")
+        if self._first_content_ms is not None:
+            raise RuntimeError("First content has already been recorded.")
+
+        self._first_content_ms = _elapsed_ms(self._started_ns, self._clock.monotonic_ns())
+        return self._first_content_ms
 
     def finish(self) -> RequestTiming:
         if self._finished:
@@ -74,5 +103,6 @@ class RequestTimer:
         return RequestTiming(
             request_started_at=self._request_started_at,
             response_completed_at=response_completed_at,
-            response_completed_ms=round(elapsed_ns / 1_000_000, 3),
+            response_completed_ms=_elapsed_ms(self._started_ns, completed_ns),
+            first_content_ms=self._first_content_ms,
         )

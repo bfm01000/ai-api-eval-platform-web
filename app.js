@@ -20,7 +20,21 @@ const rangeData = {
 const providerRows = document.querySelector("#providerRows");
 const runRows = document.querySelector("#runRows");
 const toast = document.querySelector("#toast");
+const providerSelect = document.querySelector("#providerSelect");
+const modelInput = document.querySelector("#modelInput");
+const endpointInput = document.querySelector("#endpointInput");
+const apiKeyField = document.querySelector("#apiKeyField");
+const apiKeyInput = document.querySelector("#apiKeyInput");
+const runButton = document.querySelector("#runButton");
+let configuredProviders = [];
+let testMode = "local";
 let toastTimer;
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>'"]/g, (character) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", "\"": "&quot;"
+  })[character]);
+}
 
 function showToast(message) {
   toast.textContent = message;
@@ -43,15 +57,78 @@ function renderRuns(filter = "all") {
   runRows.innerHTML = visibleRuns.length ? visibleRuns.map((run) => `
     <tr>
       <td><span class="run-name">${run.id}<small>Performance test</small></span></td>
-      <td>${run.provider}<br><small>${run.model}</small></td><td>${run.mode}</td><td>${run.samples}</td>
+      <td>${escapeHtml(run.provider)}<br><small>${escapeHtml(run.model)}</small></td><td>${run.mode}</td><td>${run.samples}</td>
       <td><span class="health ${run.status}">${run.statusText}</span></td><td>${run.started}</td>
       <td><button class="table-action" type="button" data-report="${run.id}">${run.status === "running" ? "查看进度" : "查看报告"}</button></td>
     </tr>`).join("") : `<tr><td colspan="7">当前筛选条件下没有任务。</td></tr>`;
 }
 
-function updateEstimate() {
-  const count = Math.max(1, Math.min(20, Number(document.querySelector("#requestCount").value) || 1));
-  document.querySelector("#costEstimate").textContent = `${count} 次 · 约 ${Math.max(1, Math.ceil(count * 0.2))} 分钟`;
+function selectedProvider() {
+  return configuredProviders.find((provider) => provider.provider_id === providerSelect.value);
+}
+
+function syncProviderFields() {
+  const provider = selectedProvider();
+  if (!provider) return;
+  endpointInput.value = provider.endpoint;
+  modelInput.value = provider.default_model;
+}
+
+async function loadProviderOptions() {
+  const status = document.querySelector("#runStatus");
+  try {
+    const response = await fetch("/api/test-config");
+    if (!response.ok) throw new Error("Provider 配置加载失败");
+    const config = await response.json();
+    testMode = config.mode;
+    configuredProviders = config.providers || [];
+    if (testMode === "public") {
+      providerSelect.closest("label").hidden = true;
+      apiKeyField.hidden = false;
+      endpointInput.readOnly = false;
+      endpointInput.value = "";
+      modelInput.value = "";
+      document.querySelector("#runTitle").textContent = "测试自己的 API";
+      document.querySelector("#runDescription").textContent = "Key 只用于本次请求，不会保存";
+      document.querySelector("#dataNotice").textContent = "图表与历史列表仍为演示数据；你可以使用自己的 API Key 做一次测试。";
+    } else {
+      if (!configuredProviders.length) throw new Error("没有可用的测试 Provider");
+      providerSelect.innerHTML = configuredProviders.map((provider) =>
+        `<option value="${escapeHtml(provider.provider_id)}">${escapeHtml(provider.display_name)}</option>`
+      ).join("");
+      providerSelect.disabled = false;
+      apiKeyField.hidden = true;
+      endpointInput.readOnly = true;
+      syncProviderFields();
+    }
+    modelInput.disabled = false;
+    runButton.disabled = false;
+    status.textContent = "就绪";
+  } catch (error) {
+    providerSelect.innerHTML = "<option>配置不可用</option>";
+    status.textContent = "配置错误";
+    status.className = "status-pill failed";
+    showToast(error.message);
+  }
+}
+
+function formatDuration(value) {
+  if (value === null || value === undefined) return "不适用";
+  return value >= 1000 ? `${(value / 1000).toFixed(2)}s` : `${value.toFixed(1)}ms`;
+}
+
+async function responseError(response) {
+  try {
+    const document = await response.json();
+    const detail = document.detail;
+    if (typeof detail === "string") return detail;
+    if (detail && typeof detail === "object") {
+      return `${detail.code || "REQUEST.FAILED"}: ${detail.message || "Provider 请求失败"}`;
+    }
+  } catch (_) {
+    // The status text is the safest fallback for a non-JSON upstream error.
+  }
+  return `请求失败（HTTP ${response.status}）`;
 }
 
 function openReport(id) {
@@ -60,25 +137,26 @@ function openReport(id) {
   document.querySelector("#dialogTitle").textContent = `${run.id} · ${run.provider}`;
   document.querySelector("#dialogContent").innerHTML = `
     <div class="report-grid">
-      <div class="report-item"><span>模型</span><strong>${run.model}</strong></div>
+      <div class="report-item"><span>模型</span><strong>${escapeHtml(run.model)}</strong></div>
       <div class="report-item"><span>运行状态</span><strong>${run.statusText}</strong></div>
       <div class="report-item"><span>P95 总延迟</span><strong>${run.latency || "计算中"}</strong></div>
       <div class="report-item"><span>TTFT</span><strong>${run.ttft || "计算中"}</strong></div>
       <div class="report-item"><span>成功率</span><strong>${run.success || "计算中"}</strong></div>
       <div class="report-item"><span>样本</span><strong>${run.samples}</strong></div>
     </div>
-    <p class="report-note">这是界面原型生成的演示报告。真实版本将展示原始时间点、错误分类、Token Usage、请求参数版本和可追溯记录。</p>`;
+    <p class="report-note">${run.real ? escapeHtml(run.error || `Provider 返回：${run.content || "（空内容）"}`) : "这是界面原型生成的演示报告。真实版本将展示原始时间点、错误分类、Token Usage、请求参数版本和可追溯记录。"}</p>`;
+  document.querySelector("#dialogFootnote").textContent = run.real ? "真实单次测试结果" : "演示数据 · 不代表真实 API 测量";
   document.querySelector("#reportDialog").showModal();
 }
 
 renderProviders();
 renderRuns();
-updateEstimate();
+loadProviderOptions();
 
 document.querySelectorAll("[data-toast]").forEach((button) => button.addEventListener("click", () => showToast(button.dataset.toast)));
 document.querySelector("#dismissNotice").addEventListener("click", () => { document.querySelector(".notice").hidden = true; });
 document.querySelector("#exportButton").addEventListener("click", () => showToast("演示报告已准备，正式导出将在报告模块接入后开放"));
-document.querySelector("#requestCount").addEventListener("input", updateEstimate);
+providerSelect.addEventListener("change", syncProviderFields);
 document.querySelector("#runFilter").addEventListener("change", (event) => renderRuns(event.target.value));
 document.querySelector("#runRows").addEventListener("click", (event) => { const button = event.target.closest("[data-report]"); if (button) openReport(button.dataset.report); });
 document.querySelector("#closeDialog").addEventListener("click", () => document.querySelector("#reportDialog").close());
@@ -100,38 +178,81 @@ document.querySelectorAll(".segmented button").forEach((button) => button.addEve
   document.querySelectorAll(".x-labels text").forEach((label, index) => { label.textContent = data.labels[index]; });
 }));
 
-document.querySelector("#runForm").addEventListener("submit", (event) => {
+document.querySelector("#runForm").addEventListener("submit", async (event) => {
   event.preventDefault();
-  const button = document.querySelector("#runButton");
+  const button = runButton;
   const status = document.querySelector("#runStatus");
   const track = document.querySelector("#progressTrack");
   const bar = document.querySelector("#progressBar");
-  const provider = document.querySelector("#providerSelect").value;
-  const model = document.querySelector("#modelSelect").value;
-  const count = Number(document.querySelector("#requestCount").value);
-  const mode = document.querySelector("#modeSelect").value === "stream" ? "Streaming" : "普通请求";
-  const id = `RUN-${String(249 + runs.length).padStart(4, "0")}`;
+  const resultPanel = document.querySelector("#testResult");
+  const provider = selectedProvider();
+  if (testMode === "local" && !provider) return;
+  const model = modelInput.value.trim();
+  const endpoint = endpointInput.value.trim();
+  const modeValue = document.querySelector("#modeSelect").value;
+  const mode = modeValue === "streaming" ? "Streaming" : "普通请求";
+  const id = `LIVE-${String(Date.now()).slice(-6)}`;
+  const providerName = testMode === "public" ? "自有 API" : provider.display_name;
+  const run = { id, provider: providerName, model, mode, samples: "0 / 1", status: "running", statusText: "运行中", started: "刚刚", real: true };
 
   button.disabled = true;
   button.querySelector("span:last-child").textContent = "检测运行中";
   status.textContent = "运行中";
   status.className = "status-pill running";
   track.hidden = false;
-  bar.style.width = "12%";
-  runs.unshift({ id, provider, model, mode, samples: `0 / ${count}`, status: "running", statusText: "运行中", started: "刚刚" });
+  bar.style.width = "18%";
+  resultPanel.hidden = true;
+  resultPanel.classList.remove("error");
+  runs.unshift(run);
   renderRuns(document.querySelector("#runFilter").value);
-  document.querySelector("#runs").scrollIntoView({ behavior: "smooth", block: "start" });
 
-  window.setTimeout(() => { bar.style.width = "58%"; runs[0].samples = `${Math.max(1, Math.floor(count / 2))} / ${count}`; renderRuns(document.querySelector("#runFilter").value); }, 650);
-  window.setTimeout(() => {
-    bar.style.width = "100%";
-    Object.assign(runs[0], { samples: `${count} / ${count}`, status: "completed", statusText: "已完成", latency: "2.04s", ttft: mode === "Streaming" ? "412ms" : "不适用", success: "100%" });
-    renderRuns(document.querySelector("#runFilter").value);
+  const progressTimer = window.setTimeout(() => { bar.style.width = "68%"; }, 500);
+  try {
+    const response = await fetch(testMode === "public" ? "/api/self-tests" : "/api/provider-tests", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(testMode === "public"
+        ? { endpoint, api_key: apiKeyInput.value, model, mode: modeValue }
+        : { provider_id: provider.provider_id, model, mode: modeValue })
+    });
+    if (!response.ok) throw new Error(await responseError(response));
+    const result = await response.json();
+    const usage = result.usage ? `${result.usage.input_tokens} / ${result.usage.output_tokens} / ${result.usage.total_tokens}` : "未提供";
+    Object.assign(run, {
+      samples: "1 / 1",
+      status: "completed",
+      statusText: "已完成",
+      latency: formatDuration(result.total_latency_ms),
+      ttft: formatDuration(result.ttft_ms),
+      success: "100%",
+      content: result.content
+    });
+    document.querySelector("#testLatency").textContent = run.latency;
+    document.querySelector("#testTtft").textContent = run.ttft;
+    document.querySelector("#testUsage").textContent = usage;
+    document.querySelector("#testResponse").textContent = `响应：${result.content || "（空内容）"}`;
+    resultPanel.hidden = false;
     status.textContent = "已完成";
     status.className = "status-pill completed";
+    showToast(`${providerName} 测试成功`);
+  } catch (error) {
+    Object.assign(run, { samples: "1 / 1", status: "failed", statusText: "失败", success: "0%", ttft: "不适用", error: error.message });
+    document.querySelector("#testLatency").textContent = "-";
+    document.querySelector("#testTtft").textContent = "-";
+    document.querySelector("#testUsage").textContent = "-";
+    document.querySelector("#testResponse").textContent = error.message;
+    resultPanel.classList.add("error");
+    resultPanel.hidden = false;
+    status.textContent = "失败";
+    status.className = "status-pill failed";
+    showToast(`${providerName} 测试失败`);
+  } finally {
+    if (testMode === "public") apiKeyInput.value = "";
+    window.clearTimeout(progressTimer);
+    bar.style.width = "100%";
+    renderRuns(document.querySelector("#runFilter").value);
     button.disabled = false;
-    button.querySelector("span:last-child").textContent = "再次运行演示检测";
-    showToast(`${id} 演示检测已完成`);
+    button.querySelector("span:last-child").textContent = "再次运行测试";
     window.setTimeout(() => { track.hidden = true; bar.style.width = "0"; }, 500);
-  }, 1500);
+  }
 });

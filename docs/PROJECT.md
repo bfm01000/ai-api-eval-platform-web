@@ -56,8 +56,9 @@ Scheduler -> Task Queue -> Worker -> Provider Adapter -> AI Provider
 
 - **Frontend prototype**：零依赖 HTML / CSS / JavaScript，仅用于产品工作流验证
 - **Backend**：Python 3.12、FastAPI、Pydantic，由 uv 管理环境与锁文件
-- **Provider HTTP client**：HTTPX；普通 OpenAI-compatible Chat Completions 与单调时钟总延迟测量已实现
-- **Phase 1 storage**：SQLite，保持原始记录优先；生产数据库留待真实负载验证
+- **Provider HTTP client**：HTTPX；普通 / Streaming OpenAI-compatible Chat Completions、总延迟、TTFT 与 Tokens/s 已实现
+- **Phase 1 storage**：SQLite 原始结果存储与契约写入校验已实现；生产数据库留待真实负载验证
+- **Local test UI**：由 FastAPI 托管静态仪表盘，可选择本地配置的 Provider 发起一次真实短请求
 - **Quality gates**：pytest、Ruff、JSON Schema Draft 2020-12 与领域契约验证器
 
 ## Responsibilities
@@ -87,4 +88,4 @@ Scheduler -> Task Queue -> Worker -> Provider Adapter -> AI Provider
 
 **Phase 1：单 Provider Performance MVP。**
 
-Phase 0 已完成：项目文档、总体架构、产品界面原型、后端技术栈和可测试工程均已建立。Phase 1 已完成单次性能检测数据契约、Provider 配置与密钥脱敏、非流式 OpenAI-compatible Adapter 和总请求耗时测量，当前进入 Streaming 与首个有效内容事件识别。
+Phase 0 已完成。Phase 1 已完成数据契约、Provider 配置与密钥脱敏、普通 / Streaming Adapter、总延迟、TTFT、Usage、Tokens/s 和 SQLite 原始结果持久化；当前实现顺序重复测试执行器，并已提供本地 Provider 单次真实测试入口。

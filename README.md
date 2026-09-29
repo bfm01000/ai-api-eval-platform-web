@@ -38,4 +38,13 @@ uv run pytest -W error
 uv run ruff check .
 ```
 
-当前提供 `GET /health`、契约验证、Provider 配置 / 密钥脱敏，以及非流式 OpenAI-compatible Adapter。Adapter 已通过真实 loopback HTTP 集成测试，但尚未通过外部 Provider 烟雾测试。
+当前提供 `GET /health`、Provider 选择与单次真实测试 API、契约验证、Provider 配置 / 密钥脱敏，以及普通和流式 OpenAI-compatible Adapter。
+
+## 本地与线上模式
+
+项目支持两种运行模式，由 `backend/.env` 中的 `API_OBSERVATORY_PUBLIC_MODE` 控制：
+
+- 本地模式：设置为 `false`。仅本机使用，允许选择 `config/providers.toml` 中配置的中转 Provider；服务器 API Key 只在后端进程中使用，不会发送到浏览器。
+- 公共模式：设置为 `true`。线上部署必须使用此模式。服务器配置的 Provider 接口会关闭，访问者只能提交自己的 Endpoint、API Key 和模型做一次临时测试；用户 Key 不会写入数据库、任务历史或响应，前端请求完成后会清空输入框。
+
+线上服务器不需要配置 `YLAI_TEST_API_KEY` 或 `AICOMING_TEST_API_KEY`。请同时在网关或反向代理层配置 HTTPS、请求频率限制和访问控制；公共测试接口会代服务器向用户提供的 Endpoint 发起请求，正式开放前还应增加 IP 限流和出站 Endpoint 白名单。

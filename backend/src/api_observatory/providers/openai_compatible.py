@@ -1,5 +1,7 @@
+import codecs
 import hashlib
 import json
+from collections.abc import Callable
 from typing import Literal
 
 import httpx
@@ -7,7 +9,17 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from api_observatory.config import ResolvedProvider
 from api_observatory.redaction import redact_headers, redact_text
+from api_observatory.sse import (
+    DecodedEvent,
+    SseParseError,
+    StreamState,
+    decode_event_payload,
+    parse_sse_buffer,
+)
 from api_observatory.timing import Clock, RequestTimer, RequestTiming, SystemClock
+
+ADAPTER_NAME = "openai-compatible"
+ADAPTER_VERSION = "openai-compatible@0.1.0"
 
 
 class ChatMessage(BaseModel):
@@ -54,6 +66,7 @@ class RawProviderResponse(BaseModel):
     body_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
     bytes_received: int = Field(ge=0)
     credential_redacted: bool
+    truncated: bool = False
 
 
 class StandardCompletionResult(BaseModel):
@@ -68,13 +81,46 @@ class StandardCompletionResult(BaseModel):
     timing: RequestTiming
 
 
+class StreamingCompletionResult(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    completion_id: str | None
+    model: str | None
+    content: str
+    finish_reason: str | None
+    usage: TokenUsage | None
+    raw_response: RawProviderResponse
+    timing: RequestTiming
+
+    @property
+    def ttft_ms(self) -> float | None:
+        return self.timing.first_content_ms
+
+    @property
+    def tokens_per_second(self) -> float | None:
+        if self.usage is None or self.timing.first_content_ms is None:
+            return None
+        generation_ms = self.timing.response_completed_ms - self.timing.first_content_ms
+        if generation_ms <= 0:
+            return None
+        return round(self.usage.output_tokens / (generation_ms / 1000), 3)
+
+
 class ProviderCallError(RuntimeError):
     def __init__(
         self,
         *,
-        category: Literal["connect", "timeout", "http", "provider", "protocol", "parse"],
+        category: Literal[
+            "connect", "timeout", "http", "provider", "protocol", "parse", "internal"
+        ],
         code: str,
-        phase: Literal["request_send", "response_headers", "response_body", "protocol_decode"],
+        phase: Literal[
+            "request_send",
+            "response_headers",
+            "response_body",
+            "protocol_decode",
+            "internal",
+        ],
         message: str,
         retryable: bool,
         http_status: int | None = None,
@@ -86,6 +132,7 @@ class ProviderCallError(RuntimeError):
         self.category = category
         self.code = code
         self.phase = phase
+        self.message = message
         self.retryable = retryable
         self.http_status = http_status
         self.provider_code = provider_code
@@ -124,18 +171,56 @@ class _ProviderCompletion(BaseModel):
 
 
 def _request_payload(
-    provider: ResolvedProvider, request: StandardCompletionRequest
+    provider: ResolvedProvider, request: StandardCompletionRequest, *, stream: bool
 ) -> dict[str, object]:
     parameters = request.parameters.model_dump(exclude_none=True)
     max_output_tokens = parameters.pop("max_output_tokens", None)
     if max_output_tokens is not None:
         parameters["max_tokens"] = max_output_tokens
-    return {
+    payload: dict[str, object] = {
         "model": request.model or provider.definition.default_model,
         "messages": [message.model_dump() for message in request.messages],
-        "stream": False,
+        "stream": stream,
         **parameters,
     }
+    if stream:
+        payload["stream_options"] = {"include_usage": True}
+    return payload
+
+
+def _raw_response_parts(
+    *,
+    http_status: int,
+    headers: dict[str, str],
+    body_text: str,
+    api_key: str,
+) -> RawProviderResponse:
+    try:
+        received_text = body_text
+        received_bytes = received_text.encode("utf-8")
+    except UnicodeEncodeError:
+        raise ProviderCallError(
+            category="parse",
+            code="PARSE.NON_UTF8_RESPONSE",
+            phase="response_body",
+            message="Provider response body is not valid UTF-8.",
+            retryable=False,
+            http_status=http_status,
+        ) from None
+
+    stored_body_text = redact_text(received_text, [api_key])
+    stored_body_bytes = stored_body_text.encode("utf-8")
+    redacted_headers = redact_headers(headers, [api_key])
+    return RawProviderResponse(
+        http_status=http_status,
+        provider_request_id=redacted_headers.get("x-request-id"),
+        headers=redacted_headers,
+        media_type=redacted_headers.get("content-type"),
+        body_text=stored_body_text,
+        body_sha256=hashlib.sha256(stored_body_bytes).hexdigest(),
+        bytes_received=len(received_bytes),
+        credential_redacted=stored_body_text != received_text,
+    )
 
 
 def _raw_response(
@@ -153,20 +238,11 @@ def _raw_response(
             http_status=response.status_code,
             timing=timing,
         ) from None
-
-    received_bytes = body_text.encode("utf-8")
-    stored_body_text = redact_text(body_text, [api_key])
-    stored_body_bytes = stored_body_text.encode("utf-8")
-    headers = redact_headers(dict(response.headers), [api_key])
-    return RawProviderResponse(
+    return _raw_response_parts(
         http_status=response.status_code,
-        provider_request_id=headers.get("x-request-id"),
-        headers=headers,
-        media_type=response.headers.get("content-type"),
-        body_text=stored_body_text,
-        body_sha256=hashlib.sha256(stored_body_bytes).hexdigest(),
-        bytes_received=len(received_bytes),
-        credential_redacted=stored_body_text != body_text,
+        headers=dict(response.headers),
+        body_text=body_text,
+        api_key=api_key,
     )
 
 
@@ -197,6 +273,18 @@ def _provider_error(raw: RawProviderResponse, timing: RequestTiming) -> Provider
     )
 
 
+def _auth_headers(api_key: str) -> dict[str, str]:
+    return {
+        "authorization": f"Bearer {api_key}",
+        "content-type": "application/json",
+        "user-agent": "api-observatory/0.1.0",
+    }
+
+
+FinishTiming = Callable[[], RequestTiming]
+SnapshotRaw = Callable[..., RawProviderResponse | None]
+
+
 class OpenAICompatibleAdapter:
     def __init__(self, client: httpx.AsyncClient, clock: Clock | None = None) -> None:
         self._client = client
@@ -208,18 +296,13 @@ class OpenAICompatibleAdapter:
         request: StandardCompletionRequest,
     ) -> StandardCompletionResult:
         api_key = provider.api_key.get_secret_value()
-        headers = {
-            "authorization": f"Bearer {api_key}",
-            "content-type": "application/json",
-            "user-agent": "api-observatory/0.1.0",
-        }
-        payload = _request_payload(provider, request)
+        payload = _request_payload(provider, request, stream=False)
         timeout_seconds = provider.definition.timeout_ms / 1000
         timer = RequestTimer.start(self._clock)
         try:
             response = await self._client.post(
                 str(provider.definition.endpoint),
-                headers=headers,
+                headers=_auth_headers(api_key),
                 json=payload,
                 timeout=timeout_seconds,
             )
@@ -277,6 +360,230 @@ class OpenAICompatibleAdapter:
             content=choice.message.content,
             finish_reason=choice.finish_reason,
             usage=usage,
+            raw_response=raw,
+            timing=timing,
+        )
+
+    async def complete_streaming(
+        self,
+        provider: ResolvedProvider,
+        request: StandardCompletionRequest,
+    ) -> StreamingCompletionResult:
+        api_key = provider.api_key.get_secret_value()
+        payload = _request_payload(provider, request, stream=True)
+        timeout_seconds = provider.definition.timeout_ms / 1000
+        timer = RequestTimer.start(self._clock)
+        decoder = codecs.getincrementaldecoder("utf-8")()
+        state = StreamState()
+        raw_text_parts: list[str] = []
+        buffer = ""
+        received_headers: dict[str, str] = {}
+        http_status: int | None = None
+        done_received = False
+        finished = False
+        finished_timing: RequestTiming | None = None
+
+        def finish_timing() -> RequestTiming:
+            nonlocal finished, finished_timing
+            if not finished:
+                finished = True
+                finished_timing = timer.finish()
+            assert finished_timing is not None
+            return finished_timing
+
+        def snapshot_raw(*, truncated: bool) -> RawProviderResponse | None:
+            if http_status is None:
+                return None
+            raw = _raw_response_parts(
+                http_status=http_status,
+                headers=received_headers,
+                body_text="".join(raw_text_parts),
+                api_key=api_key,
+            )
+            return raw.model_copy(update={"truncated": truncated})
+
+        try:
+            async with self._client.stream(
+                "POST",
+                str(provider.definition.endpoint),
+                headers=_auth_headers(api_key),
+                json=payload,
+                timeout=timeout_seconds,
+            ) as response:
+                http_status = response.status_code
+                received_headers = dict(response.headers)
+                if not 200 <= response.status_code <= 299:
+                    await response.aread()
+                    timing = finish_timing()
+                    raw = _raw_response(response, api_key, timing)
+                    raise _provider_error(raw, timing)
+
+                async for byte_chunk in response.aiter_bytes():
+                    if not byte_chunk:
+                        continue
+                    try:
+                        text = decoder.decode(byte_chunk)
+                    except UnicodeDecodeError:
+                        raise self._stream_error(
+                            finish_timing=finish_timing,
+                            snapshot_raw=snapshot_raw,
+                            code="PARSE.NON_UTF8_RESPONSE",
+                            message="Provider stream is not valid UTF-8.",
+                        ) from None
+                    if not text:
+                        continue
+                    raw_text_parts.append(text)
+                    buffer += text
+                    parsed = parse_sse_buffer(buffer)
+                    buffer = parsed.remainder
+                    for event in parsed.events:
+                        decoded = self._decode_event(
+                            event.payload,
+                            finish_timing=finish_timing,
+                            snapshot_raw=snapshot_raw,
+                        )
+                        if decoded.kind == "done":
+                            done_received = True
+                            continue
+                        assert decoded.chunk is not None
+                        had_content = state.first_content_seen
+                        state.apply(decoded.chunk)
+                        if state.first_content_seen and not had_content:
+                            timer.record_first_content()
+        except httpx.TimeoutException:
+            raise self._stream_transport_error(
+                timing=finish_timing(),
+                raw=snapshot_raw(truncated=True),
+                category="timeout",
+                code="TIMEOUT.REQUEST",
+                phase="response_body" if http_status is not None else "request_send",
+                message="Provider stream exceeded its timeout.",
+            ) from None
+        except httpx.RequestError:
+            raise self._stream_transport_error(
+                timing=finish_timing(),
+                raw=snapshot_raw(truncated=True),
+                category="connect",
+                code="CONNECT.STREAM_FAILED",
+                phase="response_body" if http_status is not None else "request_send",
+                message="Provider stream could not be completed.",
+            ) from None
+
+        timing = finish_timing()
+        raw = snapshot_raw(truncated=False)
+        if raw is None:
+            raise ProviderCallError(
+                category="internal",
+                code="INTERNAL.STREAM",
+                phase="internal",
+                message="Provider stream ended before an HTTP response was received.",
+                retryable=True,
+                timing=timing,
+            )
+        if buffer.strip():
+            raise self._stream_protocol_error(
+                timing=timing,
+                raw=raw.model_copy(update={"truncated": True}),
+                code="PROTOCOL.STREAM_INCOMPLETE",
+                message="Provider stream ended with an incomplete SSE event.",
+            )
+        if not done_received:
+            raise self._stream_protocol_error(
+                timing=timing,
+                raw=raw.model_copy(update={"truncated": True}),
+                code="PROTOCOL.STREAM_INCOMPLETE",
+                message="Provider stream ended without the [DONE] sentinel.",
+            )
+        if not state.first_content_seen:
+            raise self._stream_protocol_error(
+                timing=timing,
+                raw=raw,
+                code="PROTOCOL.NO_CONTENT",
+                message="Provider stream carried no non-empty text content.",
+            )
+
+        usage = None
+        if state.usage is not None:
+            usage = TokenUsage(
+                input_tokens=state.usage[0],
+                output_tokens=state.usage[1],
+                total_tokens=state.usage[2],
+            )
+        return StreamingCompletionResult(
+            completion_id=state.completion_id,
+            model=state.model,
+            content=state.content,
+            finish_reason=state.finish_reason,
+            usage=usage,
+            raw_response=raw,
+            timing=timing,
+        )
+
+    def _decode_event(
+        self,
+        payload: str,
+        *,
+        finish_timing: FinishTiming,
+        snapshot_raw: SnapshotRaw,
+    ) -> DecodedEvent:
+        try:
+            return decode_event_payload(payload)
+        except SseParseError as exc:
+            raise self._stream_error(
+                finish_timing=finish_timing,
+                snapshot_raw=snapshot_raw,
+                code="PROTOCOL.INVALID_STREAM_CHUNK",
+                message=f"Provider stream chunk is invalid: {exc}",
+            ) from None
+
+    @staticmethod
+    def _stream_error(
+        *,
+        finish_timing: FinishTiming,
+        snapshot_raw: SnapshotRaw,
+        code: str,
+        message: str,
+    ) -> ProviderCallError:
+        timing = finish_timing()
+        raw = snapshot_raw(truncated=True)
+        assert raw is not None
+        return OpenAICompatibleAdapter._stream_protocol_error(
+            timing=timing, raw=raw, code=code, message=message
+        )
+
+    @staticmethod
+    def _stream_protocol_error(
+        *, timing: RequestTiming, raw: RawProviderResponse, code: str, message: str
+    ) -> ProviderCallError:
+        category = "parse" if code.startswith("PARSE.") else "protocol"
+        return ProviderCallError(
+            category=category,
+            code=code,
+            phase="protocol_decode",
+            message=message,
+            retryable=False,
+            http_status=raw.http_status,
+            raw_response=raw,
+            timing=timing,
+        )
+
+    @staticmethod
+    def _stream_transport_error(
+        *,
+        timing: RequestTiming,
+        raw: RawProviderResponse | None,
+        category: Literal["connect", "timeout"],
+        code: str,
+        phase: Literal["request_send", "response_body"],
+        message: str,
+    ) -> ProviderCallError:
+        return ProviderCallError(
+            category=category,
+            code=code,
+            phase=phase,
+            message=message,
+            retryable=True,
+            http_status=raw.http_status if raw is not None else None,
             raw_response=raw,
             timing=timing,
         )

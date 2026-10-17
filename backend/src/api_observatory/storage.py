@@ -323,3 +323,13 @@ class ResultStore:
             (run_id,),
         ).fetchall()
         return [json.loads(row["document_json"]) for row in rows]
+
+    def get_run_metrics(self, run_id: str):
+        """Compute aggregated metrics (P50, P95, P99, success rate) for a run."""
+        from api_observatory.metrics import compute_run_metrics
+
+        run = self.get_run(run_id)
+        if run is None:
+            return None
+        results = self.list_results(run_id)
+        return compute_run_metrics(results, run_id=run_id)

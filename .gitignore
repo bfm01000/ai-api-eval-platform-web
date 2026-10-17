@@ -11,6 +11,7 @@ __pycache__/
 htmlcov/
 backend/config/providers.toml
 api-key
+deploy.env
 
 # Runtime data may contain prompts, responses, endpoints, or usage metadata.
 data/

@@ -2,11 +2,18 @@
 
 面向 AI API 与中转服务的质量检测、能力评测和选择决策平台。
 
-当前仓库已完成 **Phase 0：项目基础设施与架构**，正在推进 **Phase 1：单 Provider Performance MVP**。根目录的静态页面是产品界面原型，数据均为演示数据，不代表真实 API 检测结果。
+当前为 v0.1 公共测试工具：使用自己的 Key 执行普通 / Streaming 检测，查看成功率、P50 / P95、TTFT 和 Usage，导出本页报告。公共模式不展示演示图表，也不保存公共测试记录。
 
-## 查看原型
+## 本地预览公共版
 
-直接打开 `index.html`，或在本目录启动任意静态文件服务器。
+```bash
+cd backend
+uv sync --frozen --all-groups
+API_OBSERVATORY_PUBLIC_MODE=true uv run uvicorn api_observatory.app:app --host 127.0.0.1 --port 8000 --no-proxy-headers
+```
+
+打开 http://127.0.0.1:8000 。请通过后端服务访问，直接打开 HTML 无法测试。
+生产部署使用 Dockerfile、Compose 与 Caddy，详见 [部署与验收](docs/DEPLOYMENT.md)。
 
 ## 项目文档
 
@@ -45,6 +52,6 @@ uv run ruff check .
 项目支持两种运行模式，由 `backend/.env` 中的 `API_OBSERVATORY_PUBLIC_MODE` 控制：
 
 - 本地模式：设置为 `false`。仅本机使用，允许选择 `config/providers.toml` 中配置的中转 Provider；服务器 API Key 只在后端进程中使用，不会发送到浏览器。
-- 公共模式：设置为 `true`。线上部署必须使用此模式。服务器配置的 Provider 接口会关闭，访问者只能提交自己的 Endpoint、API Key 和模型做一次临时测试；用户 Key 不会写入数据库、任务历史或响应，前端请求完成后会清空输入框。
+- 公共模式：设置为 `true`。线上部署必须使用此模式。服务器 Provider 与历史接口关闭，访问者提交自己的 Endpoint、Key 和模型做临时测试；Key 不写入数据库、历史或响应，提交时立即清空输入框。
 
-线上服务器不需要配置 `YLAI_TEST_API_KEY` 或 `AICOMING_TEST_API_KEY`。请同时在网关或反向代理层配置 HTTPS、请求频率限制和访问控制；公共测试接口会代服务器向用户提供的 Endpoint 发起请求，正式开放前还应增加 IP 限流和出站 Endpoint 白名单。
+线上不配置 `YLAI_TEST_API_KEY` 或 `AICOMING_TEST_API_KEY`。已加入 HTTPS 公网目标校验、样本数、限流、并发、响应大小和总时长限制。首版限定单 worker / 单实例；真实域名 HTTPS 和生产容器验收是发布前最后步骤。

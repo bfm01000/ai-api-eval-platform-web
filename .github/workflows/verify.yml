@@ -1,0 +1,43 @@
+name: Verify release
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.10"
+          python-version: "3.12"
+      - name: Verify backend in public mode
+        working-directory: backend
+        env:
+          API_OBSERVATORY_PUBLIC_MODE: "true"
+        run: |
+          uv sync --frozen --all-groups
+          uv run pytest -W error
+          uv run ruff check .
+          uv run ruff format --check .
+          uv lock --check
+          uv run python ../scripts/verify_contract.py
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build production image
+        run: docker build -t ai-api-eval:ci .
+      - name: Check Caddy configuration
+        run: docker run --rm -e SITE_DOMAIN=eval.example.com -e ACME_EMAIL=admin@example.com -v "$PWD/deploy/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2.10.2-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+      - name: Check production container
+        run: |
+          docker run -d --name api-eval --read-only --tmpfs /tmp -p 127.0.0.1:18000:8000 ai-api-eval:ci
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:18000/health; then break; fi
+            sleep 1
+          done
+          python3 scripts/smoke_public.py http://127.0.0.1:18000
+      - name: Stop verification container
+        if: always()
+        run: docker rm -f api-eval || true

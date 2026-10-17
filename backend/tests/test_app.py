@@ -9,7 +9,7 @@ from api_observatory.config import ProviderCatalog, ProviderDefinition
 
 async def request(path: str) -> Response:
     transport = ASGITransport(app=create_app())
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
+    async with AsyncClient(transport=transport, base_url="http://localhost") as client:
         return await client.get(path)
 
 
@@ -58,9 +58,10 @@ def test_provider_list_exposes_metadata_without_credentials() -> None:
         app = create_app(
             catalog=provider_catalog(),
             environment={"TEST_PROVIDER_API_KEY": "must-not-be-returned"},
+            public_mode=False,
         )
         transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
+        async with AsyncClient(transport=transport, base_url="http://localhost") as client:
             return await client.get("/api/providers")
 
     response = asyncio.run(run())
@@ -109,9 +110,10 @@ def test_provider_test_runs_real_adapter_without_returning_credential() -> None:
                 catalog=provider_catalog(),
                 environment={"TEST_PROVIDER_API_KEY": "test-provider-secret"},
                 provider_client=upstream,
+                public_mode=False,
             )
             transport = ASGITransport(app=app)
-            async with AsyncClient(transport=transport, base_url="http://test") as client:
+            async with AsyncClient(transport=transport, base_url="http://localhost") as client:
                 return await client.post(
                     "/api/provider-tests",
                     json={
@@ -153,7 +155,7 @@ def test_public_mode_hides_configured_providers() -> None:
             public_mode=True,
         )
         transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
+        async with AsyncClient(transport=transport, base_url="http://localhost") as client:
             return await client.get("/api/test-config"), await client.get("/api/providers")
 
     config_response, providers_response = asyncio.run(run())
@@ -188,7 +190,7 @@ def test_public_mode_tests_user_supplied_key_without_persisting_or_returning_it(
         async with AsyncClient(transport=MockTransport(provider_handler)) as upstream:
             app = create_app(public_mode=True, provider_client=upstream)
             transport = ASGITransport(app=app)
-            async with AsyncClient(transport=transport, base_url="http://test") as client:
+            async with AsyncClient(transport=transport, base_url="http://localhost") as client:
                 return await client.post(
                     "/api/self-tests",
                     json={
@@ -212,7 +214,7 @@ def test_public_self_test_rejects_http_endpoint() -> None:
     async def run() -> Response:
         app = create_app(public_mode=True)
         transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
+        async with AsyncClient(transport=transport, base_url="http://localhost") as client:
             return await client.post(
                 "/api/self-tests",
                 json={
@@ -232,7 +234,7 @@ def test_public_self_test_rejects_local_or_reserved_https_endpoints() -> None:
     async def run(endpoint: str) -> Response:
         app = create_app(public_mode=True)
         transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
+        async with AsyncClient(transport=transport, base_url="http://localhost") as client:
             return await client.post(
                 "/api/self-tests",
                 json={
@@ -254,3 +256,86 @@ def test_frontend_is_served_by_backend() -> None:
     assert response.status_code == 200
     assert "API 观测台" in response.text
     assert "运行真实测试" in response.text
+
+
+def test_runs_api_lifecycle(tmp_path) -> None:
+    from pathlib import Path
+
+    from api_observatory.storage import ResultStore
+
+    db_path = Path(tmp_path) / "runs_test.sqlite3"
+    store = ResultStore.open(db_path)
+
+    def provider_handler(request: Request) -> Response:
+        return Response(
+            200,
+            json={
+                "id": "chatcmpl-run-test",
+                "model": "test-model",
+                "choices": [
+                    {
+                        "message": {"role": "assistant", "content": "OK"},
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 5,
+                    "completion_tokens": 1,
+                    "total_tokens": 6,
+                },
+            },
+        )
+
+    async def run() -> None:
+        async with AsyncClient(transport=MockTransport(provider_handler)) as upstream:
+            app = create_app(
+                catalog=provider_catalog(),
+                environment={"TEST_PROVIDER_API_KEY": "test-secret"},
+                provider_client=upstream,
+                store=store,
+                public_mode=False,
+            )
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://localhost") as client:
+                # 1. Create Run with 2 samples
+                create_resp = await client.post(
+                    "/api/runs",
+                    json={
+                        "provider_id": "test_provider",
+                        "model": "test-model",
+                        "mode": "standard",
+                        "samples": 2,
+                    },
+                )
+                assert create_resp.status_code == 200
+                data = create_resp.json()
+                run_id = data["run_id"]
+                assert data["status"] == "completed"
+                assert data["total_samples"] == 2
+                assert data["succeeded"] == 2
+                assert data["metrics"] is not None
+                assert data["metrics"]["success_rate"] == 1.0
+
+                # 2. List runs
+                list_resp = await client.get("/api/runs")
+                assert list_resp.status_code == 200
+                runs = list_resp.json()
+                assert any(r["run_id"] == run_id for r in runs)
+
+                # 3. Get run by id
+                get_resp = await client.get(f"/api/runs/{run_id}")
+                assert get_resp.status_code == 200
+                detail = get_resp.json()
+                assert detail["run"]["run_id"] == run_id
+                assert detail["metrics"] is not None
+                assert detail["metrics"]["succeeded_samples"] == 2
+
+                # 4. Get run results
+                results_resp = await client.get(f"/api/runs/{run_id}/results")
+                assert results_resp.status_code == 200
+                results = results_resp.json()
+                assert len(results) == 2
+                assert results[0]["status"] == "succeeded"
+
+    asyncio.run(run())
+    store.close()

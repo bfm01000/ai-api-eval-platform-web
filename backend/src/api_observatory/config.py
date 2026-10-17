@@ -35,6 +35,11 @@ class AppSettings(BaseSettings):
     provider_config_path: Path = Path("config/providers.toml")
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     public_mode: bool = True
+    public_requests_per_minute: int = Field(default=5, ge=1, le=60)
+    public_requests_per_day: int = Field(default=30, ge=1, le=1000)
+    public_global_requests_per_day: int = Field(default=1000, ge=1, le=100000)
+    public_max_concurrency: int = Field(default=4, ge=1, le=32)
+    public_run_timeout_seconds: float = Field(default=75, gt=0, le=120)
 
 
 class ProviderDefinition(BaseModel):

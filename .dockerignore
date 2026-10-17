@@ -1,0 +1,13 @@
+**
+!Dockerfile
+!backend/
+!backend/pyproject.toml
+!backend/uv.lock
+!backend/src/
+!backend/src/**
+backend/src/**/__pycache__/
+!contracts/
+!contracts/**
+!index.html
+!app.js
+!styles.css

@@ -1,0 +1,63 @@
+services:
+  api:
+    build: .
+    image: ai-api-eval-platform:${RELEASE_TAG:-local}
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,noexec,nosuid
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 100
+    stop_grace_period: 90s
+    environment:
+      API_OBSERVATORY_PUBLIC_MODE: "true"
+      API_OBSERVATORY_PUBLIC_REQUESTS_PER_MINUTE: "5"
+      API_OBSERVATORY_PUBLIC_REQUESTS_PER_DAY: "30"
+      API_OBSERVATORY_PUBLIC_GLOBAL_REQUESTS_PER_DAY: "1000"
+      API_OBSERVATORY_PUBLIC_MAX_CONCURRENCY: "4"
+    # Only Caddy may supply a forwarded client address. Do not change this to '*'.
+    command: ["/app/backend/.venv/bin/python", "-m", "uvicorn", "api_observatory.app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--proxy-headers", "--forwarded-allow-ips", "172.30.0.2", "--no-access-log", "--limit-concurrency", "32", "--timeout-keep-alive", "5", "--timeout-graceful-shutdown", "80"]
+    networks:
+      site:
+        ipv4_address: 172.30.0.3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+  web:
+    image: caddy:2.10.2-alpine
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SITE_DOMAIN: ${SITE_DOMAIN:?Set SITE_DOMAIN in deploy.env}
+      ACME_EMAIL: ${ACME_EMAIL:?Set ACME_EMAIL in deploy.env}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      site:
+        ipv4_address: 172.30.0.2
+    mem_limit: 128m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+networks:
+  site:
+    ipam:
+      config:
+        - subnet: 172.30.0.0/29
+volumes:
+  caddy_data:
+  caddy_config:

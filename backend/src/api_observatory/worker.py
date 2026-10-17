@@ -20,6 +20,7 @@ import httpx
 from pydantic import BaseModel, ConfigDict, Field
 
 from api_observatory.config import ProviderDefinition, ResolvedProvider
+from api_observatory.metrics import RunMetrics, compute_run_metrics
 from api_observatory.providers.openai_compatible import (
     ChatMessage,
     CompletionParameters,
@@ -61,11 +62,12 @@ class RunSummary(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     run_id: str
-    status: Literal["completed", "failed", "cancelled"]
+    status: Literal["pending", "running", "completed", "failed", "cancelled"]
     total_samples: int
     succeeded: int
     failed: int
     cancelled: int
+    metrics: RunMetrics | None = None
 
 
 class _SampleRunner:
@@ -186,6 +188,9 @@ class RunExecutor:
         completed_at = self._clock.utc_now().isoformat().replace("+00:00", "Z")
         self._store.set_run_status(actual_run_id, run_status, completed_at=completed_at)
 
+        results = self._store.list_results(actual_run_id)
+        metrics = compute_run_metrics(results, run_id=actual_run_id) if results else None
+
         return RunSummary(
             run_id=actual_run_id,
             status=run_status,
@@ -193,4 +198,5 @@ class RunExecutor:
             succeeded=succeeded,
             failed=failed,
             cancelled=0,
+            metrics=metrics,
         )

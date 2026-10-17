@@ -1,8 +1,8 @@
 # Current Status
 
-Current Phase: Phase 1 - 单 Provider Performance MVP
-Current Task: P1-T09 - 顺序重复测试执行器
-Status: In Progress
+Current Phase: v0.1 公共版发布候选
+Current Task: 安全加固与部署文件已完成，待目标服务器验收
+Status: Ready for deployment verification (not deployed)
 
 # Completed
 
@@ -49,6 +49,11 @@ Status: In Progress
 - 建立 Git 忽略的本地测试凭证文件与 Provider 配置，保留两个已验证有效的外部测试线路
 - 新增 Provider 列表与单次真实测试 API，由后端托管现有仪表盘，浏览器不接触凭证值
 - 将“发起检测”从模拟计时改为真实普通 / Streaming 请求，展示总延迟、TTFT、Usage 和响应摘要
+- P1-T09：实现按样本计划顺序执行重复请求的执行器（`RunExecutor`、`RunPlan`、`RunSummary`）及单样本隔离执行与持久化
+- P1-T10：实现基于原始结果记录的 P50、P90、P95、P99 分位数、成功率、错误分类统计与 Token/流式速率聚合模块（`metrics.py`）
+- 在 `ResultStore` 中增加按 run_id 按需计算派生指标接口 `get_run_metrics`，保持原始数据为唯一事实源架构原则
+- 在 `RunExecutor` 完成时自动派生挂载聚合指标到 `RunSummary.metrics`
+- 新增 10 个测试用例，覆盖线性插值分位数算法、统计汇总、普通/流式成功聚合、混合错误与取消分类、存储与执行器集成
 
 # In Progress
 
@@ -56,16 +61,17 @@ Status: In Progress
 
 # Next
 
-**P1-T09：实现按样本计划顺序执行重复请求的执行器。**
+**在 CI / 目标服务器完成 Docker 构建、HTTPS 与真实 Provider 普通 / Streaming 验收。**
 
 # Blockers
 
-- 无
+- 尚未指定正式服务器和域名。本机无 Docker Engine，容器构建和 Caddy 校验待 CI 执行。
+- 本机 DNS 返回被公网策略拒绝的地址，真实 Provider 需在正常出站网络环境验收。
 
 # Known Issues
 
-- 当前页面只使用演示数据，尚未连接真实 Provider
-- “运行检测”仅模拟前端状态流转，不代表 Phase 1 已实现
+- 公共版只保留真实测试与本页记录；本地模式的概览图表和 Provider 对比仍为演示数据。
+- 公共限流使用单进程内存状态，首版仅支持单 worker / 单实例，重启会重置配额。
 - Benchmark、行为一致性与综合评分按路线图处于未开放状态
 - 当前 Provider 配置仅支持 `env:` 凭证引用；Secret Manager 留待规模化阶段
 - 外部 Provider 仅完成 `gpt-5.5` 单次短请求烟雾测试，不能代表长期稳定性或性能分布
@@ -76,7 +82,31 @@ Status: In Progress
 
 执行：`uv run pytest -W error`、`uv run ruff check .`、`uv run ruff format --check .`、`uv lock --check`、`uv run python ../scripts/verify_contract.py`，并解析全部契约 JSON。
 
-结果：**PASS**。81 个测试零警告通过；Provider 列表、真实测试 API、凭证隔离、静态页面托管、契约文档构建与 SQLite 持久化均有覆盖；Ruff 检查与格式检查通过；锁文件一致；v1 Schema 与全部契约样例通过。浏览器端对 YLAI Test 和 AIComing Test 的 `gpt-5.5` 普通请求均返回 `OK`。
+结果（2026-10-17）：**156 个测试零警告通过**，Ruff、格式、锁文件和契约验证通过；生产依赖 pip-audit 未发现已知漏洞。浏览器使用模拟上游验证普通 / Streaming、失败状态、提交清空 Key、刷新清空记录及真实 JSON 导出；导出不含测试 Key。390px 与 1280px 页面无整体横向溢出，控制台无错误。Docker / Caddy / 域名证书与真实公网 Provider 尚未完成本轮验收，不能把模拟上游结果视为真实服务商表现。
+
+## 2026-10-17
+
+### Goal
+
+将公共版修复到可进行生产部署验收的程度，保持本地中转 Key 与访客 Key 隔离。
+
+### Changes
+
+新增连接层公网地址校验与 DNS 解析后 IP 固定，保留原始 TLS SNI / 证书验证，拒绝重定向与压缩响应；公共历史关闭，自带 Key 的任务只使用请求内存。校验错误不回显任何输入，公共请求增加次数、并发、16 KiB 入站、1 MiB 出站及总时限限制。本地 Provider 接口仅允许 loopback + localhost。
+
+公共页面移除演示数据，增加真实报告导出、提交立即清空 Key、失败分类与手机布局修复。新增 Docker、Compose、Caddy HTTPS、GitHub Actions、生产冒烟脚本和部署 / 回滚文档。
+
+### Verification
+
+156 个自动测试及所有原有质量检查通过。浏览器与依赖审计结果见上方 Last Verification。模拟测试不使用本机真实 Key。
+
+### Result
+
+代码改造完成，发布候选可供部署验收；尚未发布到公网。部署边界见 `docs/DEPLOYMENT.md`。
+
+### Next
+
+指定服务器和域名，运行容器 CI 与生产冒烟，并用可撤销的自有 Key 完成真实服务商验收。
 
 ## 2026-09-27 23:04
 

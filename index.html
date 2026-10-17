@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="AI API 服务质量检测与评估平台界面原型" />
+    <meta name="description" content="使用自己的 API Key 检测 AI API 连通性、延迟和流式输出速度" />
     <title>API 观测台</title>
     <link rel="icon" href="data:," />
     <link rel="stylesheet" href="styles.css" />
@@ -18,10 +18,10 @@
 
         <nav class="primary-nav" aria-label="主要导航">
           <p class="nav-label">工作台</p>
-          <a class="nav-item active" href="#overview" data-section="overview"><span aria-hidden="true">◫</span>评测总览</a>
+          <a class="nav-item active" href="#overview" data-section="overview"><span aria-hidden="true">◫</span>API 测试</a>
           <a class="nav-item" href="#runs" data-section="runs"><span aria-hidden="true">▶</span>检测任务</a>
-          <a class="nav-item" href="#providers" data-section="providers"><span aria-hidden="true">⌁</span>服务商</a>
-          <p class="nav-label">研究与决策</p>
+          <a class="nav-item local-only" href="#providers" data-section="providers"><span aria-hidden="true">⌁</span>服务商</a>
+          <p class="nav-label local-only">研究与决策</p>
           <button class="nav-item locked" type="button" data-toast="Benchmark 将在 Phase 3 开放"><span aria-hidden="true">◇</span>能力评测 <small>规划中</small></button>
           <button class="nav-item locked" type="button" data-toast="行为一致性研究将在 Phase 5 开放"><span aria-hidden="true">◎</span>行为一致性 <small>研究中</small></button>
           <button class="nav-item locked" type="button" data-toast="综合评分将在指标稳定后开放"><span aria-hidden="true">≋</span>综合评分 <small>规划中</small></button>
@@ -29,7 +29,7 @@
 
         <div class="sidebar-footer">
           <span class="phase-dot" aria-hidden="true"></span>
-          <div><strong>Phase 1</strong><small>Performance MVP</small></div>
+          <div><strong>v0.1</strong><small>API 性能测试</small></div>
         </div>
       </aside>
 
@@ -37,21 +37,21 @@
         <header class="topbar">
           <div>
             <p class="eyebrow">AI API 服务质量</p>
-            <h1>评测总览</h1>
+            <h1>API 性能测试</h1>
           </div>
           <div class="topbar-actions">
-            <span class="demo-badge"><span></span>演示数据</span>
-            <button class="secondary-button" type="button" id="exportButton">导出报告</button>
+            <span class="demo-badge local-only"><span></span>演示数据</span>
+            <button class="secondary-button" type="button" id="exportButton" disabled>导出报告</button>
           </div>
         </header>
 
         <section class="notice" aria-label="数据说明">
-          <div><strong>数据说明</strong><span id="dataNotice">图表与历史列表仍为演示数据；本地 Provider 测试只在本机启用。</span></div>
+          <div><strong>隐私与费用</strong><span id="dataNotice">测试请求会消耗所填 Key 的额度。请仅填写你信任的服务地址。</span></div>
           <button type="button" id="dismissNotice" aria-label="关闭说明">×</button>
         </section>
 
         <section id="overview" class="section-block" aria-labelledby="overview-title">
-          <div class="section-heading">
+          <div class="section-heading local-only">
             <div><h2 id="overview-title">线路健康概览</h2><p>最近 24 小时 · 3 个演示 Provider</p></div>
             <div class="segmented" role="group" aria-label="时间范围">
               <button type="button" data-range="1h">1 小时</button>
@@ -60,7 +60,7 @@
             </div>
           </div>
 
-          <div class="metric-grid">
+          <div class="metric-grid local-only">
             <article class="metric-card"><div class="metric-label"><span>成功率</span><em class="good">正常</em></div><strong id="successMetric">99.42%</strong><p><span class="up">↑ 0.18%</span> 对比上一周期</p></article>
             <article class="metric-card"><div class="metric-label"><span>P95 总延迟</span><em>目标 &lt; 3s</em></div><strong id="latencyMetric">2.18s</strong><p><span class="up">↓ 240ms</span> 响应更快</p></article>
             <article class="metric-card"><div class="metric-label"><span>P50 TTFT</span><em>Streaming</em></div><strong id="ttftMetric">428ms</strong><p><span class="down">↑ 36ms</span> 略有波动</p></article>
@@ -68,7 +68,7 @@
           </div>
 
           <div class="dashboard-grid">
-            <section class="chart-panel" aria-labelledby="trend-title">
+            <section class="chart-panel local-only" aria-labelledby="trend-title">
               <div class="panel-heading">
                 <div><h3 id="trend-title">延迟趋势</h3><p id="trendSubtitle">每 4 小时聚合 · 毫秒</p></div>
                 <div class="legend"><span><i class="line-blue"></i>P50</span><span><i class="line-coral"></i>P95</span></div>
@@ -89,16 +89,18 @@
               <div class="panel-heading"><div><h3 id="runTitle">发起检测</h3><p id="runDescription">单次真实 API 连通与生成测试</p></div><span class="status-pill" id="runStatus">加载中</span></div>
               <form id="runForm">
                 <label>Provider<select id="providerSelect" name="provider" disabled><option>正在加载...</option></select></label>
-                <label>模型<input id="modelInput" name="model" type="text" required disabled /></label>
-                <label class="full-field">Endpoint<input id="endpointInput" name="endpoint" type="url" required readonly /></label>
-                <label class="full-field" id="apiKeyField" hidden>你的 API Key<input id="apiKeyInput" name="api_key" type="password" autocomplete="off" spellcheck="false" /></label>
-                <div class="form-row"><label>请求次数<input type="number" value="1" readonly /></label><label>模式<select id="modeSelect" name="mode"><option value="standard">普通请求</option><option value="streaming">Streaming</option></select></label></div>
-                <div class="cost-line"><span>单次测试</span><strong>最多 16 output tokens</strong></div>
+                <label>模型<input id="modelInput" name="model" type="text" maxlength="200" required disabled /></label>
+                <label class="full-field">完整请求地址<input id="endpointInput" name="endpoint" type="url" maxlength="2000" placeholder="https://api.example.com/v1/chat/completions" required readonly /></label>
+                <label class="full-field" id="apiKeyField" hidden>你的 API Key<input id="apiKeyInput" name="api_key" type="password" minlength="4" maxlength="1000" autocomplete="off" spellcheck="false" /></label>
+                <div class="form-row"><label>请求次数<input id="samplesInput" name="samples" type="number" value="1" min="1" max="3" /></label><label>模式<select id="modeSelect" name="mode"><option value="standard">普通请求</option><option value="streaming">Streaming</option></select></label></div>
+                <div class="cost-line"><span>每次最多 16 输出 tokens</span><strong id="sampleCost">本轮 1 次请求</strong></div>
                 <button class="primary-button" type="submit" id="runButton" disabled><span class="button-icon" aria-hidden="true">▶</span><span>运行真实测试</span></button>
                 <div class="progress-track" id="progressTrack" hidden><span id="progressBar"></span></div>
                 <div class="test-result" id="testResult" hidden aria-live="polite">
-                  <div><span>总延迟</span><strong id="testLatency">-</strong></div>
-                  <div><span>TTFT</span><strong id="testTtft">-</strong></div>
+                  <div><span>P50 延迟</span><strong id="testLatency">-</strong></div>
+                  <div><span>P95 延迟</span><strong id="testLatencyP95">-</strong></div>
+                  <div><span>TTFT P50</span><strong id="testTtft">-</strong></div>
+                  <div><span>成功率</span><strong id="testSuccess">-</strong></div>
                   <div><span>Token Usage</span><strong id="testUsage">-</strong></div>
                   <p id="testResponse"></p>
                 </div>
@@ -107,7 +109,7 @@
           </div>
         </section>
 
-        <section id="providers" class="section-block table-section" aria-labelledby="providers-title">
+        <section id="providers" class="section-block table-section local-only" aria-labelledby="providers-title">
           <div class="section-heading"><div><h2 id="providers-title">Provider 对比</h2><p>相同模型与测试口径下的演示结果</p></div><button class="text-button" type="button" data-toast="Provider 管理将在 Phase 2 开放">管理 Provider</button></div>
           <div class="table-wrap">
             <table>
@@ -118,7 +120,7 @@
         </section>
 
         <section id="runs" class="section-block table-section" aria-labelledby="runs-title">
-          <div class="section-heading"><div><h2 id="runs-title">最近检测任务</h2><p>运行状态、测试口径与结果追踪</p></div><div class="run-filter"><label for="runFilter">筛选</label><select id="runFilter"><option value="all">全部状态</option><option value="completed">已完成</option><option value="running">运行中</option><option value="failed">失败</option></select></div></div>
+          <div class="section-heading"><div><h2 id="runs-title">本页测试记录</h2><p>刷新后清空，可导出本页已完成的报告</p></div><div class="run-filter"><label for="runFilter">筛选</label><select id="runFilter"><option value="all">全部状态</option><option value="completed">已完成</option><option value="running">运行中</option><option value="failed">失败或部分失败</option></select></div></div>
           <div class="table-wrap">
             <table>
               <thead><tr><th>任务</th><th>Provider / 模型</th><th>模式</th><th>样本</th><th>状态</th><th>开始时间</th><th><span class="sr-only">操作</span></th></tr></thead>
@@ -127,7 +129,7 @@
           </div>
         </section>
 
-        <footer class="page-footer"><span>API 观测台 · Phase 1</span><span>单次 Provider 测试已接入</span></footer>
+        <footer class="page-footer"><span>API 观测台 · v0.1</span><span>延迟包含本站服务器到服务商的网络耗时</span></footer>
       </main>
     </div>
 

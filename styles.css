@@ -145,3 +145,14 @@ dialog { width: min(540px, calc(100vw - 32px)); padding: 0; border: 0; border-ra
 }
 
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } *, *::before, *::after { transition-duration: 0.01ms !important; } }
+
+[hidden] { display: none !important; }
+body:not(.local-mode) .local-only, body:not(.local-mode) .nav-item.locked { display: none; }
+body:not(.local-mode) .dashboard-grid { grid-template-columns: minmax(0, 1fr); }
+body:not(.local-mode) .run-panel { box-shadow: none; }
+body:not(.local-mode) .run-panel form { max-width: 900px; }
+.cost-line { gap: 12px; flex-wrap: wrap; }
+.panel-heading p, .notice span { overflow-wrap: anywhere; }
+.secondary-button:disabled { opacity: 0.5; cursor: default; }
+.health.completed { background: var(--green-soft); color: var(--green-dark); }
+.table-wrap { position: relative; }

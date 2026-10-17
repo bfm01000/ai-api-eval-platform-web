@@ -1,0 +1,17 @@
+{
+    email {$ACME_EMAIL}
+    admin off
+}
+
+{$SITE_DOMAIN} {
+    header Strict-Transport-Security "max-age=31536000"
+    request_body {
+        max_size 16KB
+    }
+    reverse_proxy api:8000 {
+        header_up X-Forwarded-For {remote_host}
+        transport http {
+            response_header_timeout 85s
+        }
+    }
+}

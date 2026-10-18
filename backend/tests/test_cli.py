@@ -13,6 +13,15 @@ from api_observatory.storage import ResultStore
 from api_observatory.worker import RunSummary
 
 
+@pytest.fixture(autouse=True)
+def isolated_cli_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    example = Path(__file__).resolve().parents[1] / "config/providers.example.toml"
+    config_path = tmp_path / "providers.toml"
+    config_path.write_text(example.read_text(encoding="utf-8"), encoding="utf-8")
+    monkeypatch.setattr("api_observatory.cli.BACKEND_ROOT", tmp_path)
+    monkeypatch.setenv("API_OBSERVATORY_PROVIDER_CONFIG_PATH", str(config_path))
+
+
 def test_format_helpers() -> None:
     assert _format_duration(None) == "N/A"
     assert _format_duration(500.0) == "500.0ms"
@@ -46,6 +55,7 @@ async def test_cli_list_providers(capsys) -> None:
     assert code == 0
     captured = capsys.readouterr()
     assert "Configured Providers:" in captured.out
+    assert "northstar_demo" in captured.out
 
 
 @pytest.mark.anyio

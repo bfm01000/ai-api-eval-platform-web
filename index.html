@@ -20,11 +20,11 @@
           <p class="nav-label">工作台</p>
           <a class="nav-item active" href="#overview" data-section="overview"><span aria-hidden="true">◫</span>API 测试</a>
           <a class="nav-item" href="#runs" data-section="runs"><span aria-hidden="true">▶</span>检测任务</a>
-          <a class="nav-item local-only" href="#providers" data-section="providers"><span aria-hidden="true">⌁</span>服务商</a>
+          <a class="nav-item" href="#comparison" data-section="comparison"><span aria-hidden="true">⌁</span>线路对比</a>
+          <a class="nav-item local-only" href="#providers" data-section="providers"><span aria-hidden="true">▤</span>服务商</a>
           <p class="nav-label local-only">研究与决策</p>
-          <button class="nav-item locked" type="button" data-toast="Benchmark 将在 Phase 3 开放"><span aria-hidden="true">◇</span>能力评测 <small>规划中</small></button>
-          <button class="nav-item locked" type="button" data-toast="行为一致性研究将在 Phase 5 开放"><span aria-hidden="true">◎</span>行为一致性 <small>研究中</small></button>
-          <button class="nav-item locked" type="button" data-toast="综合评分将在指标稳定后开放"><span aria-hidden="true">≋</span>综合评分 <small>规划中</small></button>
+          <a class="nav-item local-only" href="#benchmark" data-section="benchmark"><span aria-hidden="true">◇</span>能力评测</a>
+          <a class="nav-item local-only" href="#reference" data-section="reference"><span aria-hidden="true">◎</span>参考数据</a>
         </nav>
 
         <div class="sidebar-footer">
@@ -40,7 +40,7 @@
             <h1>API 性能测试</h1>
           </div>
           <div class="topbar-actions">
-            <span class="demo-badge local-only"><span></span>演示数据</span>
+            <span class="demo-badge local-only"><span></span>本地数据</span>
             <button class="secondary-button" type="button" id="exportButton" disabled>导出报告</button>
           </div>
         </header>
@@ -52,7 +52,7 @@
 
         <section id="overview" class="section-block" aria-labelledby="overview-title">
           <div class="section-heading local-only">
-            <div><h2 id="overview-title">线路健康概览</h2><p>最近 24 小时 · 3 个演示 Provider</p></div>
+            <div><h2 id="overview-title">线路健康概览</h2><p id="overviewSummary">正在加载历史记录</p></div>
             <div class="segmented" role="group" aria-label="时间范围">
               <button type="button" data-range="1h">1 小时</button>
               <button class="active" type="button" data-range="24h">24 小时</button>
@@ -61,28 +61,29 @@
           </div>
 
           <div class="metric-grid local-only">
-            <article class="metric-card"><div class="metric-label"><span>成功率</span><em class="good">正常</em></div><strong id="successMetric">99.42%</strong><p><span class="up">↑ 0.18%</span> 对比上一周期</p></article>
-            <article class="metric-card"><div class="metric-label"><span>P95 总延迟</span><em>目标 &lt; 3s</em></div><strong id="latencyMetric">2.18s</strong><p><span class="up">↓ 240ms</span> 响应更快</p></article>
-            <article class="metric-card"><div class="metric-label"><span>P50 TTFT</span><em>Streaming</em></div><strong id="ttftMetric">428ms</strong><p><span class="down">↑ 36ms</span> 略有波动</p></article>
-            <article class="metric-card"><div class="metric-label"><span>输出速度</span><em>中位数</em></div><strong id="speedMetric">62.4<small> tok/s</small></strong><p><span class="up">↑ 4.8</span> 对比上一周期</p></article>
+            <article class="metric-card"><div class="metric-label"><span>成功率</span></div><strong id="successMetric">-</strong><p>所选时间范围</p></article>
+            <article class="metric-card"><div class="metric-label"><span>P95 总延迟</span></div><strong id="latencyMetric">-</strong><p>成功样本</p></article>
+            <article class="metric-card"><div class="metric-label"><span>P50 TTFT</span></div><strong id="ttftMetric">-</strong><p>流式成功样本</p></article>
+            <article class="metric-card"><div class="metric-label"><span>输出速度</span></div><strong id="speedMetric">-</strong><p>流式成功样本 · tok/s</p></article>
           </div>
 
           <div class="dashboard-grid">
             <section class="chart-panel local-only" aria-labelledby="trend-title">
               <div class="panel-heading">
-                <div><h3 id="trend-title">延迟趋势</h3><p id="trendSubtitle">每 4 小时聚合 · 毫秒</p></div>
+                <div><h3 id="trend-title">延迟趋势</h3><p id="trendSubtitle">正在加载</p></div>
                 <div class="legend"><span><i class="line-blue"></i>P50</span><span><i class="line-coral"></i>P95</span></div>
               </div>
               <div class="chart-wrap">
                 <svg id="latencyChart" viewBox="0 0 720 250" role="img" aria-label="过去 24 小时 P50 和 P95 延迟趋势图">
                   <g class="grid-lines"><line x1="54" y1="28" x2="698" y2="28"/><line x1="54" y1="87" x2="698" y2="87"/><line x1="54" y1="146" x2="698" y2="146"/><line x1="54" y1="205" x2="698" y2="205"/></g>
-                  <g class="y-labels"><text x="8" y="33">3000</text><text x="8" y="92">2000</text><text x="8" y="151">1000</text><text x="29" y="210">0</text></g>
-                  <path id="p95Area" class="area" d="M54 70 L161 79 L269 64 L376 92 L483 84 L591 62 L698 76 L698 205 L54 205 Z"/>
-                  <polyline id="p95Line" class="p95-line" points="54,70 161,79 269,64 376,92 483,84 591,62 698,76"/>
-                  <polyline id="p50Line" class="p50-line" points="54,151 161,158 269,148 376,165 483,159 591,145 698,154"/>
-                  <g class="x-labels"><text x="46" y="235">00:00</text><text x="153" y="235">04:00</text><text x="261" y="235">08:00</text><text x="368" y="235">12:00</text><text x="475" y="235">16:00</text><text x="583" y="235">20:00</text><text x="678" y="235">现在</text></g>
+                  <g class="y-labels"><text x="8" y="33">-</text><text x="8" y="92">-</text><text x="8" y="151">-</text><text x="29" y="210">0</text></g>
+                  <path id="p95Area" class="area" d=""/>
+                  <path id="p95Line" class="p95-line" d=""/>
+                  <path id="p50Line" class="p50-line" d=""/>
+                  <g class="x-labels"><text x="46" y="235">-</text><text x="153" y="235">-</text><text x="261" y="235">-</text><text x="368" y="235">-</text><text x="475" y="235">-</text><text x="583" y="235">-</text><text x="678" y="235">-</text></g>
                 </svg>
               </div>
+              <p id="trendEmpty" class="trend-empty">所选时间内尚无成功样本。</p>
             </section>
 
             <section class="run-panel" aria-labelledby="runTitle">
@@ -109,8 +110,51 @@
           </div>
         </section>
 
+        <section id="comparison" class="section-block table-section" aria-labelledby="comparison-title">
+          <div class="section-heading"><div><h2 id="comparison-title">线路对比</h2><p>同一提示词 · 顺序采样</p></div><button class="secondary-button" id="exportComparison" type="button" disabled>导出对比</button></div>
+          <form id="comparisonForm" class="comparison-form">
+            <fieldset id="localComparisonTargets" hidden><legend>选择线路</legend><div id="localTargetOptions" class="target-options"></div></fieldset>
+            <div id="publicComparisonTargets" class="comparison-targets" hidden>
+              <fieldset class="comparison-target"><legend>线路 A</legend><label>名称<input name="display_name" maxlength="60" required placeholder="线路 A" /></label><label>模型<input name="model" maxlength="200" required placeholder="模型名称" /></label><label class="wide">完整请求地址<input name="endpoint" type="url" maxlength="2000" required placeholder="https://api.example.com/v1/chat/completions" /></label><label class="wide">API Key<input name="api_key" type="password" minlength="4" maxlength="1000" autocomplete="off" spellcheck="false" required /></label></fieldset>
+              <fieldset class="comparison-target"><legend>线路 B</legend><label>名称<input name="display_name" maxlength="60" required placeholder="线路 B" /></label><label>模型<input name="model" maxlength="200" required placeholder="模型名称" /></label><label class="wide">完整请求地址<input name="endpoint" type="url" maxlength="2000" required placeholder="https://api.example.com/v1/chat/completions" /></label><label class="wide">API Key<input name="api_key" type="password" minlength="4" maxlength="1000" autocomplete="off" spellcheck="false" required /></label></fieldset>
+            </div>
+            <div class="comparison-controls"><label>模式<select id="comparisonMode"><option value="standard">普通请求</option><option value="streaming">Streaming</option></select></label><label id="comparisonSamplesField">每条线路请求次数<input id="comparisonSamples" type="number" min="1" max="3" value="1" /></label><span id="comparisonCost">共 2 次请求</span><button class="primary-button" id="comparisonButton" type="submit">运行对比</button></div>
+          </form>
+          <p id="comparisonStatus" class="comparison-status" role="status"></p>
+          <div class="table-wrap"><table><thead><tr><th>线路 / 模型</th><th>状态</th><th>成功率</th><th>P50</th><th>P95</th><th>TTFT</th><th>Tokens/s</th><th>Token 用量</th></tr></thead><tbody id="comparisonRows"><tr><td colspan="8">尚无对比结果。</td></tr></tbody></table></div>
+        </section>
+
+        <section id="benchmark" class="section-block table-section local-only" aria-labelledby="benchmark-title">
+          <div class="section-heading"><div><h2 id="benchmark-title">能力评测</h2><p id="benchmarkVersion">正在加载题集</p></div><button class="secondary-button" type="button" id="exportBenchmark" disabled>导出评测</button></div>
+          <form id="benchmarkForm" class="benchmark-form">
+            <label>Provider<select id="benchmarkProvider" required></select></label>
+            <label>模型<input id="benchmarkModel" required maxlength="200" /></label>
+            <label>每题样本数<input id="benchmarkSamples" type="number" min="1" max="3" value="1" required /></label>
+            <label>输入价格 · 元/百万 tokens<input id="benchmarkInputPrice" type="number" min="0.000001" step="any" required /></label>
+            <label>输出价格 · 元/百万 tokens<input id="benchmarkOutputPrice" type="number" min="0.000001" step="any" required /></label>
+            <label>本轮上限 · 元<input id="benchmarkBudget" type="number" min="0.01" max="100" step="0.01" value="10" required /></label>
+            <div class="benchmark-actions"><button class="secondary-button" type="button" id="benchmarkEstimate">计算预估</button><button class="primary-button" type="submit" id="benchmarkRun" disabled>运行真实评测</button><span id="benchmarkCost" role="status">填写价格后先计算预估</span></div>
+          </form>
+          <p class="benchmark-caution">价格由你填写，预估不等于服务商账单；最多 100 元累计预估，运行会实际消耗本机 Key 额度。</p>
+          <div class="table-wrap"><table><thead><tr><th>题目</th><th>类别</th><th>提示词</th><th>判定答案</th></tr></thead><tbody id="benchmarkCases"><tr><td colspan="4">正在加载</td></tr></tbody></table></div>
+          <div class="section-heading benchmark-results-heading"><div><h3>历史评测</h3><p>得分按全部尝试计算，失败请求计零分</p></div></div>
+          <div class="table-wrap"><table><thead><tr><th>批次</th><th>Provider / 模型</th><th>能力得分</th><th>成功率</th><th>参考答案一致率</th><th>样本</th><th>操作</th></tr></thead><tbody id="benchmarkReports"><tr><td colspan="7">暂无评测记录。</td></tr></tbody></table></div>
+          <div id="benchmarkDetail" class="benchmark-detail" hidden></div>
+        </section>
+
+        <section id="reference" class="section-block table-section local-only" aria-labelledby="reference-title">
+          <div class="section-heading"><div><h2 id="reference-title">参考答案导入</h2><p>只比较同版本题目的回答一致率；不能据此判定模型身份</p></div><button class="secondary-button" type="button" id="downloadReferenceTemplate">下载模板</button></div>
+          <form id="referenceForm" class="reference-form">
+            <label>参考模型名称<input id="referenceModel" maxlength="200" required /></label>
+            <label>来源说明<input id="referenceSource" maxlength="500" required /></label>
+            <label>JSON 文件<input id="referenceFile" type="file" accept=".json,application/json" required /></label>
+            <button class="primary-button" type="submit">导入参考答案</button>
+          </form>
+          <p id="referenceStatus" class="comparison-status" role="status">尚未导入。文件格式：{"benchmark_version":"capability-core.v1","benchmark_sha256":"...","answers":[{"case_id":"arithmetic-01","answer":"391"}]}。版本哈希可在题集表上方查看。</p>
+        </section>
+
         <section id="providers" class="section-block table-section local-only" aria-labelledby="providers-title">
-          <div class="section-heading"><div><h2 id="providers-title">Provider 对比</h2><p>相同模型与测试口径下的演示结果</p></div><button class="text-button" type="button" data-toast="Provider 管理将在 Phase 2 开放">管理 Provider</button></div>
+          <div class="section-heading"><div><h2 id="providers-title">Provider 记录</h2><p>按所选时间范围汇总的本机测试</p></div></div>
           <div class="table-wrap">
             <table>
               <thead><tr><th>Provider</th><th>状态</th><th>成功率</th><th>P50</th><th>P95</th><th>TTFT</th><th>Tokens/s</th><th>最近检测</th></tr></thead>

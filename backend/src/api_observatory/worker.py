@@ -93,7 +93,11 @@ class _SampleRunner:
             messages=self._plan.messages,
             parameters=self._plan.parameters,
             created_at=created_at,
-            metadata=self._plan.metadata,
+            metadata={
+                key: value
+                for key, value in (self._plan.metadata or {}).items()
+                if key in {"test_case_id", "tags"}
+            },
         )
 
     async def execute(self, sample_index: int) -> dict:

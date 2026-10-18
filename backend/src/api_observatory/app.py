@@ -1,6 +1,8 @@
+import asyncio
 import os
 from collections.abc import Mapping
 from contextlib import asynccontextmanager
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, Literal
 
@@ -9,9 +11,26 @@ from dotenv import dotenv_values
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
-from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field, SecretStr, field_validator
+from pydantic import (
+    AnyHttpUrl,
+    BaseModel,
+    ConfigDict,
+    Field,
+    SecretStr,
+    field_validator,
+    model_validator,
+)
 
 from api_observatory import __version__
+from api_observatory.benchmark import (
+    BENCHMARK_SHA256,
+    BENCHMARK_VERSION,
+    CASE_BY_ID,
+    CASES,
+    build_report,
+    estimated_max_cny,
+)
+from api_observatory.comparison import ComparisonReport, compare_providers
 from api_observatory.config import (
     AppSettings,
     CredentialResolutionError,
@@ -24,6 +43,7 @@ from api_observatory.config import (
 )
 from api_observatory.egress import PublicHTTPTransport, validate_public_endpoint
 from api_observatory.guard import PublicGuard
+from api_observatory.insights import InsightWindow, build_insights
 from api_observatory.providers.openai_compatible import (
     ChatMessage,
     CompletionParameters,
@@ -33,6 +53,7 @@ from api_observatory.providers.openai_compatible import (
     TokenUsage,
 )
 from api_observatory.redaction import redact_text
+from api_observatory.results import new_run_id
 from api_observatory.storage import DEFAULT_DB_PATH, ResultStore
 from api_observatory.worker import RunExecutor, RunPlan, RunSummary
 
@@ -121,6 +142,70 @@ class SelfRunCreateRequest(SelfTestRequest):
     samples: int = Field(default=1, ge=1, le=3)
 
 
+class LocalComparisonRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    provider_ids: tuple[str, ...] = Field(min_length=2, max_length=5)
+    model: str | None = Field(default=None, min_length=1, max_length=200)
+    mode: Literal["standard", "streaming"] = "standard"
+    samples: int = Field(default=1, ge=1, le=3)
+
+    @model_validator(mode="after")
+    def unique_providers(self):
+        if len(set(self.provider_ids)) != len(self.provider_ids):
+            raise ValueError("provider_ids must be unique")
+        return self
+
+
+class SelfComparisonTarget(SelfTestRequest):
+    display_name: str = Field(min_length=1, max_length=60)
+
+
+class SelfComparisonRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, hide_input_in_errors=True)
+
+    targets: tuple[SelfComparisonTarget, ...] = Field(min_length=2, max_length=3)
+    mode: Literal["standard", "streaming"] = "standard"
+    samples: int = Field(default=1, ge=1, le=1)
+
+
+class BenchmarkRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    provider_id: str = Field(min_length=1, max_length=64)
+    model: str | None = Field(default=None, min_length=1, max_length=200)
+    samples: int = Field(default=1, ge=1, le=3)
+    input_cny_per_million: Decimal = Field(gt=0, le=100000)
+    output_cny_per_million: Decimal = Field(gt=0, le=100000)
+    max_budget_cny: Decimal = Field(gt=0, le=100)
+
+
+class ReferenceAnswer(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    case_id: str
+    answer: str = Field(min_length=1, max_length=10000)
+
+
+class ReferenceImport(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    benchmark_version: Literal["capability-core.v1"]
+    benchmark_sha256: str
+    reference_model: str = Field(min_length=1, max_length=200)
+    source: str = Field(min_length=1, max_length=500)
+    answers: tuple[ReferenceAnswer, ...] = Field(min_length=1, max_length=len(CASES))
+
+    @model_validator(mode="after")
+    def validate_dataset(self):
+        ids = [answer.case_id for answer in self.answers]
+        if self.benchmark_sha256 != BENCHMARK_SHA256 or len(ids) != len(set(ids)):
+            raise ValueError("Reference dataset version or case IDs are invalid")
+        if set(ids) - CASE_BY_ID.keys():
+            raise ValueError("Unknown benchmark case ID")
+        return self
+
+
 def create_app(
     *,
     settings: AppSettings | None = None,
@@ -134,6 +219,7 @@ def create_app(
     active_settings = settings or AppSettings(_env_file=BACKEND_ROOT / ".env")
     is_public_mode = active_settings.public_mode if public_mode is None else public_mode
     active_store = store
+    benchmark_lock = asyncio.Lock()
 
     @asynccontextmanager
     async def lifespan(_app):
@@ -362,9 +448,199 @@ def create_app(
                 executor = RunExecutor(store=temporary_store, client=client)
                 return await executor.run(plan)
 
+    @application.post("/api/comparisons", tags=["runs"], response_model=ComparisonReport)
+    async def create_local_comparison(request: LocalComparisonRequest) -> ComparisonReport:
+        require_local_mode()
+        active_catalog = configured_catalog()
+        targets = []
+        for provider_id in request.provider_ids:
+            try:
+                definition = active_catalog.get(provider_id)
+            except KeyError:
+                raise HTTPException(status_code=404, detail="Provider not found.") from None
+            try:
+                resolved = resolve_provider(definition, configured_environment())
+            except CredentialResolutionError as exc:
+                raise HTTPException(status_code=503, detail=str(exc)) from None
+            targets.append(
+                (definition.display_name, resolved, request.model or definition.default_model)
+            )
+        if provider_client is None:
+            async with httpx.AsyncClient(trust_env=False, follow_redirects=False) as client:
+                return await compare_providers(
+                    tuple(targets),
+                    mode=request.mode,
+                    samples=request.samples,
+                    store=local_store(),
+                    client=client,
+                )
+        return await compare_providers(
+            tuple(targets),
+            mode=request.mode,
+            samples=request.samples,
+            store=local_store(),
+            client=provider_client,
+        )
+
+    @application.post("/api/self-comparisons", tags=["runs"], response_model=ComparisonReport)
+    async def create_self_comparison(request: SelfComparisonRequest) -> ComparisonReport:
+        targets = []
+        for index, target in enumerate(request.targets, start=1):
+            try:
+                definition = ProviderDefinition(
+                    provider_id=f"self_{index}",
+                    display_name=target.display_name,
+                    endpoint=target.endpoint,
+                    protocol="openai-chat-completions",
+                    credential_ref="env:USER_SUBMITTED_API_KEY",
+                    adapter="openai-compatible",
+                    default_model=target.model,
+                    timeout_ms=20000,
+                )
+            except ValueError:
+                raise HTTPException(status_code=422, detail="测试参数无效。") from None
+            targets.append(
+                (
+                    target.display_name,
+                    ResolvedProvider(definition=definition, api_key=target.api_key),
+                    target.model,
+                )
+            )
+        with ResultStore.open(Path(":memory:")) as temporary_store:
+            async with self_client() as client:
+                return await compare_providers(
+                    tuple(targets),
+                    mode=request.mode,
+                    samples=request.samples,
+                    store=temporary_store,
+                    client=client,
+                )
+
     @application.get("/api/runs", tags=["runs"])
     async def get_runs() -> list[dict[str, Any]]:
         return local_store().list_runs()
+
+    @application.get("/api/insights", tags=["runs"])
+    async def get_insights(window: InsightWindow = "24h") -> dict[str, Any]:
+        require_local_mode()
+        return build_insights(local_store(), configured_catalog().providers, window)
+
+    @application.get("/api/benchmark", tags=["benchmark"])
+    async def benchmark_catalog() -> dict[str, Any]:
+        require_local_mode()
+        return {
+            "version": BENCHMARK_VERSION,
+            "sha256": BENCHMARK_SHA256,
+            "cases": [case.__dict__ for case in CASES],
+            "reference": local_store().get_reference_set(),
+        }
+
+    @application.post("/api/benchmark/reference", tags=["benchmark"])
+    async def import_reference(request: ReferenceImport) -> dict[str, Any]:
+        require_local_mode()
+        local_store().save_reference_set(request.model_dump())
+        return {"imported": len(request.answers), "identity_verified": False}
+
+    @application.post("/api/benchmark/estimate", tags=["benchmark"])
+    async def benchmark_estimate(request: BenchmarkRequest) -> dict[str, Any]:
+        require_local_mode()
+        try:
+            configured_catalog().get(request.provider_id)
+        except KeyError:
+            raise HTTPException(status_code=404, detail="Provider not found.") from None
+        estimate = estimated_max_cny(
+            samples=request.samples,
+            input_cny_per_million=request.input_cny_per_million,
+            output_cny_per_million=request.output_cny_per_million,
+        )
+        return {
+            "requests": len(CASES) * request.samples,
+            "estimated_max_cny": str(estimate),
+            "within_budget": estimate <= request.max_budget_cny,
+            "pricing_verified": False,
+        }
+
+    @application.post("/api/benchmark/runs", tags=["benchmark"])
+    async def run_benchmark(request: BenchmarkRequest) -> dict[str, Any]:
+        require_local_mode()
+        try:
+            definition = configured_catalog().get(request.provider_id)
+        except KeyError:
+            raise HTTPException(status_code=404, detail="Provider not found.") from None
+        try:
+            provider = resolve_provider(definition, configured_environment())
+        except CredentialResolutionError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from None
+        estimate = estimated_max_cny(
+            samples=request.samples,
+            input_cny_per_million=request.input_cny_per_million,
+            output_cny_per_million=request.output_cny_per_million,
+        )
+        if estimate > request.max_budget_cny:
+            raise HTTPException(status_code=422, detail="预估费用超过本轮预算。")
+        async with benchmark_lock:
+            active = local_store()
+            reservations = {
+                run["metadata"]["benchmark_batch_id"]: Decimal(run["metadata"]["estimated_max_cny"])
+                for run in active.list_runs()
+                if "benchmark_batch_id" in run.get("metadata", {})
+            }
+            if sum(reservations.values(), Decimal(0)) + estimate > Decimal(100):
+                raise HTTPException(status_code=422, detail="本机累计评测预估已达 100 元上限。")
+            batch_id = new_run_id()
+            if provider_client is None:
+                client = httpx.AsyncClient(trust_env=False, follow_redirects=False)
+            else:
+                client = provider_client
+            try:
+                executor = RunExecutor(store=active, client=client)
+                for case in CASES:
+                    plan = RunPlan(
+                        provider=definition,
+                        resolved=provider,
+                        model=request.model or definition.default_model,
+                        mode="standard",
+                        messages=(ChatMessage(role="user", content=case.prompt),),
+                        parameters=CompletionParameters(temperature=0, max_output_tokens=64),
+                        samples=request.samples,
+                        metadata={
+                            "benchmark_batch_id": batch_id,
+                            "benchmark_case_id": case.case_id,
+                            "test_case_id": case.case_id,
+                            "benchmark_version": BENCHMARK_VERSION,
+                            "benchmark_sha256": BENCHMARK_SHA256,
+                            "provider_id": definition.provider_id,
+                            "model": request.model or definition.default_model,
+                            "samples": request.samples,
+                            "estimated_max_cny": str(estimate),
+                        },
+                    )
+                    await executor.run(plan)
+            finally:
+                if provider_client is None:
+                    await client.aclose()
+            return build_report(active, batch_id) or {}
+
+    @application.get("/api/benchmark/reports", tags=["benchmark"])
+    async def benchmark_reports() -> list[dict[str, Any]]:
+        require_local_mode()
+        active = local_store()
+        ids = list(
+            dict.fromkeys(
+                run["metadata"]["benchmark_batch_id"]
+                for run in active.list_runs()
+                if "benchmark_batch_id" in run.get("metadata", {})
+            )
+        )
+        return [report for batch_id in ids if (report := build_report(active, batch_id))]
+
+    @application.get("/api/benchmark/reports/{batch_id}", tags=["benchmark"])
+    async def benchmark_report(batch_id: str) -> dict[str, Any]:
+        require_local_mode()
+        report = build_report(local_store(), batch_id)
+        if report is None:
+            raise HTTPException(status_code=404, detail="Benchmark report not found.")
+        return report
 
     @application.get("/api/runs/{run_id}", tags=["runs"])
     async def get_run_by_id(run_id: str) -> dict[str, Any]:

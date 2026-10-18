@@ -97,6 +97,12 @@ CREATE TABLE IF NOT EXISTS results (
 
 CREATE INDEX IF NOT EXISTS idx_results_run_id ON results(run_id);
 CREATE INDEX IF NOT EXISTS idx_results_run_sample ON results(run_id, sample_index);
+
+CREATE TABLE IF NOT EXISTS reference_sets (
+    reference_id TEXT PRIMARY KEY,
+    imported_at TEXT NOT NULL,
+    document_json TEXT NOT NULL
+);
 """
 
 
@@ -323,6 +329,36 @@ class ResultStore:
             (run_id,),
         ).fetchall()
         return [json.loads(row["document_json"]) for row in rows]
+
+    def list_results_since(self, completed_at: str) -> list[dict[str, Any]]:
+        connection = self._require_connection()
+        rows = connection.execute(
+            "SELECT document_json FROM results WHERE completed_at >= ? ORDER BY completed_at",
+            (completed_at,),
+        ).fetchall()
+        return [json.loads(row["document_json"]) for row in rows]
+
+    def save_reference_set(self, document: Mapping[str, Any]) -> None:
+        connection = self._require_connection()
+        connection.execute(
+            "INSERT OR REPLACE INTO reference_sets (reference_id, imported_at, document_json)"
+            " VALUES ('active', ?, ?)",
+            (_utc_now_rfc3339(), json.dumps(document, ensure_ascii=False)),
+        )
+        connection.commit()
+
+    def get_reference_set(self) -> dict[str, Any] | None:
+        row = (
+            self._require_connection()
+            .execute(
+                "SELECT document_json, imported_at FROM reference_sets "
+                "WHERE reference_id = 'active'"
+            )
+            .fetchone()
+        )
+        if row is None:
+            return None
+        return {**json.loads(row["document_json"]), "imported_at": row["imported_at"]}
 
     def get_run_metrics(self, run_id: str):
         """Compute aggregated metrics (P50, P95, P99, success rate) for a run."""

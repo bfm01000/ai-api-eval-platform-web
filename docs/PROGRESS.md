@@ -1,8 +1,17 @@
 # Current Status
 
-Current Phase: v0.1 公共版发布候选
-Current Task: 安全加固与部署文件已完成，待目标服务器验收
-Status: Ready for deployment verification (not deployed)
+Current Phase: 本地 v0.2 评测原型 + 公共版发布准备
+Current Task: 题集、参考导入与报告验收；等待正式部署环境和官方参考样本
+Status: 本地功能可测，尚未公网部署；不能宣称模型身份已验证
+
+## 2026-10-18 更新
+
+- 本地新增多 Provider 同提示词顺序对比、1h / 24h / 7d 原始结果派生指标，移除概览演示数字。
+- 公共访客仍仅可使用自己的 Key；公共对比不落盘，本地密钥和历史接口继续隔离。
+- 新增 `capability-core.v1` 六题版本化小题集、确定性评分、每题 1–3 次顺序执行、原始结果关联和历史 JSON 报告。
+- 新增用户填写单价的费用预估与本机评测批次累计 100 元预估门槛。价格未经平台核验，其他测试入口不计入该累计值，**不是实际账单硬上限**。本轮没有发起真实付费采样。
+- 新增同版本参考答案导入及回答一致率；来源由导入者声明，身份始终标为未验证。
+- 164 项自动测试已通过；正式服务器、域名、官方 Key 暂无，公网部署和真实参考行为研究仍待完成。
 
 # Completed
 
@@ -61,18 +70,18 @@ Status: Ready for deployment verification (not deployed)
 
 # Next
 
-**在 CI / 目标服务器完成 Docker 构建、HTTPS 与真实 Provider 普通 / Streaming 验收。**
+**在目标服务器完成 HTTPS 与真实 Provider 普通 / Streaming 验收；取得官方参考访问方式后采集同条件样本。**
 
 # Blockers
 
-- 尚未指定正式服务器和域名。本机无 Docker Engine，容器构建和 Caddy 校验待 CI 执行。
-- 本机 DNS 返回被公网策略拒绝的地址，真实 Provider 需在正常出站网络环境验收。
+- 尚未指定正式服务器和域名。本机无 Docker Engine；GitHub CI 已通过容器 / Caddy 检查，目标服务器验收待执行。
+- 官方模型参考 Key 暂无，无法采集官方同条件样本并验证模型身份。
 
 # Known Issues
 
-- 公共版只保留真实测试与本页记录；本地模式的概览图表和 Provider 对比仍为演示数据。
+- 当前能力题集仅为确定性小样本原型，不能代表广泛能力、长期稳定性或模型身份。
 - 公共限流使用单进程内存状态，首版仅支持单 worker / 单实例，重启会重置配额。
-- Benchmark、行为一致性与综合评分按路线图处于未开放状态
+- 行为指纹可分离性、带置信度的模型相似性和综合排行尚未完成。
 - 当前 Provider 配置仅支持 `env:` 凭证引用；Secret Manager 留待规模化阶段
 - 外部 Provider 仅完成 `gpt-5.5` 单次短请求烟雾测试，不能代表长期稳定性或性能分布
 - `max_output_tokens -> max_tokens` 是当前通用映射；特定 Provider 方言尚未实现

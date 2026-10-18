@@ -83,11 +83,17 @@ class PublicGuard:
             )
 
         headers = dict(scope["headers"])
-        local_path = scope["path"] in {
-            "/api/test-config",
-            "/api/providers",
-            "/api/provider-tests",
-        } or scope["path"].startswith("/api/runs")
+        local_path = (
+            scope["path"]
+            in {
+                "/api/test-config",
+                "/api/providers",
+                "/api/provider-tests",
+            }
+            or scope["path"].startswith("/api/runs")
+            or scope["path"] in {"/api/comparisons", "/api/insights"}
+            or scope["path"].startswith("/api/benchmark")
+        )
         if self.settings.public_mode and local_path and scope["path"] != "/api/test-config":
             return await reject(404, "Not found.")
         if not self.settings.public_mode and local_path:
@@ -105,7 +111,11 @@ class PublicGuard:
             if origin and origin != expected:
                 return await reject(403, "不允许跨站调用测试接口。")
 
-        if scope["path"].rstrip("/") not in {"/api/self-tests", "/api/self-runs"}:
+        if scope["path"].rstrip("/") not in {
+            "/api/self-tests",
+            "/api/self-runs",
+            "/api/self-comparisons",
+        }:
             return await self.app(scope, receive, secure_send)
         if scope["method"] != "POST":
             return await self.app(scope, receive, secure_send)

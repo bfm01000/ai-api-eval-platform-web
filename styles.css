@@ -84,6 +84,7 @@ h1, h2, h3, p { letter-spacing: 0; } h1 { margin: 0; font-size: 26px; line-heigh
 .panel-heading { min-height: 41px; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .legend { display: flex; align-items: center; gap: 13px; color: var(--muted); font-size: 10px; }.legend span { display: flex; align-items: center; gap: 5px; }.legend i { width: 13px; height: 2px; display: inline-block; }.line-blue { background: var(--blue); }.line-coral { background: var(--coral); }
 .chart-wrap { width: 100%; max-width: 100%; margin-top: 8px; overflow: hidden; contain: inline-size; }.chart-wrap svg { display: block; width: 100%; height: auto; min-height: 220px; }
+.trend-empty { margin: 0; color: var(--muted); font-size: 11px; }
 .grid-lines line { stroke: #e8ecea; stroke-width: 1; }.y-labels text, .x-labels text { fill: #89948f; font-size: 10px; }.area { fill: rgba(207, 101, 70, 0.07); }.p95-line, .p50-line { fill: none; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }.p95-line { stroke: var(--coral); }.p50-line { stroke: var(--blue); }
 
 .status-pill { padding: 4px 7px; border-radius: 4px; background: var(--green-soft); color: var(--green-dark); font-size: 10px; font-weight: 800; }
@@ -104,6 +105,21 @@ h1, h2, h3, p { letter-spacing: 0; } h1 { margin: 0; font-size: 26px; line-heigh
 .test-result.error p { border-left-color: var(--coral); background: var(--coral-soft); color: #813a29; }
 
 .table-section { padding-top: 2px; }
+.comparison-form { margin: 10px 0 12px; }
+.comparison-form fieldset { min-width: 0; margin: 0; padding: 12px; border: 1px solid var(--line); border-radius: 5px; }
+.comparison-form legend { padding: 0 5px; color: var(--ink); font-size: 11px; font-weight: 800; }
+.target-options { display: flex; flex-wrap: wrap; gap: 8px 16px; }
+.target-options label { display: inline-flex; align-items: center; gap: 7px; color: var(--ink); font-size: 12px; }
+.comparison-targets { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.comparison-target { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px 12px; }
+.comparison-target label, .comparison-controls label { display: flex; min-width: 0; flex-direction: column; gap: 5px; color: var(--muted); font-size: 10px; font-weight: 700; }
+.comparison-target .wide { grid-column: 1 / -1; }
+.comparison-form input:not([type="checkbox"]), .comparison-form select { width: 100%; height: 35px; padding: 0 9px; border: 1px solid var(--line-strong); border-radius: 5px; background: var(--surface); color: var(--ink); font-size: 12px; }
+.comparison-controls { display: flex; align-items: end; gap: 12px; margin-top: 12px; }
+.comparison-controls label { width: min(200px, 100%); }
+.comparison-controls > span { margin: 0 auto 10px 0; color: var(--muted); font-size: 11px; }
+.comparison-controls .primary-button { min-width: 130px; padding: 0 16px; }
+.comparison-status { min-height: 17px; margin: 0 0 8px; color: var(--muted); font-size: 11px; }
 .table-wrap { width: 100%; max-width: 100%; overflow-x: auto; contain: inline-size; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); box-shadow: var(--shadow); }
 table { width: 100%; min-width: 830px; border-collapse: collapse; text-align: left; }
 th { height: 42px; padding: 0 16px; border-bottom: 1px solid var(--line); background: var(--surface-soft); color: #73807b; font-size: 10px; font-weight: 800; text-transform: uppercase; white-space: nowrap; }
@@ -126,6 +142,10 @@ dialog { width: min(540px, calc(100vw - 32px)); padding: 0; border: 0; border-ra
 }
 
 @media (max-width: 760px) {
+  .comparison-targets { grid-template-columns: 1fr; }
+  .comparison-controls { align-items: stretch; flex-wrap: wrap; }
+  .comparison-controls label { flex: 1 1 145px; }
+  .comparison-controls > span { flex-basis: 100%; margin: 0; }
   .sidebar { position: static; width: 100%; min-height: auto; padding: 14px 16px 0; }
   .brand { padding: 0; }.primary-nav { display: flex; gap: 5px; margin: 14px -16px 0; padding: 0 16px 12px; overflow-x: auto; }.nav-label, .nav-item.locked, .sidebar-footer { display: none; }.nav-item { width: auto; min-width: max-content; min-height: 34px; padding: 0 10px; background: #1d2c27; font-size: 11px; }.nav-item.active { box-shadow: inset 0 -2px #67c6a3; }
   .main-content { margin-left: 0; padding: 21px 16px 15px; }
@@ -156,3 +176,21 @@ body:not(.local-mode) .run-panel form { max-width: 900px; }
 .secondary-button:disabled { opacity: 0.5; cursor: default; }
 .health.completed { background: var(--green-soft); color: var(--green-dark); }
 .table-wrap { position: relative; }
+.benchmark-form, .reference-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 12px 0; }
+.benchmark-form label, .reference-form label { display: flex; min-width: 0; flex-direction: column; gap: 5px; color: var(--muted); font-size: 11px; font-weight: 700; }
+.benchmark-form input, .benchmark-form select, .reference-form input { width: 100%; min-width: 0; height: 36px; padding: 0 9px; border: 1px solid var(--line-strong); border-radius: 5px; background: var(--surface); color: var(--ink); font-size: 12px; }
+.reference-form input[type="file"] { padding-top: 7px; }
+.reference-form .primary-button { align-self: end; }
+.benchmark-actions { grid-column: 1 / -1; display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.benchmark-actions .primary-button { min-width: 130px; padding: 0 14px; }
+.benchmark-actions span, .benchmark-caution { color: var(--muted); font-size: 11px; }
+.benchmark-caution { margin: 0 0 14px; }
+.benchmark-results-heading { margin: 22px 0 10px; }
+.benchmark-detail { margin-top: 18px; }
+.benchmark-detail h3 { margin: 0 0 8px; }
+.benchmark-detail p { margin: 5px 0; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+.benchmark-detail .table-wrap { margin-top: 12px; }
+.answer-cell { max-width: 460px; white-space: normal; overflow-wrap: anywhere; }
+#benchmarkVersion { max-width: 100%; overflow-wrap: anywhere; }
+@media (max-width: 760px) { .benchmark-form, .reference-form { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 470px) { .benchmark-form, .reference-form { grid-template-columns: 1fr; } }

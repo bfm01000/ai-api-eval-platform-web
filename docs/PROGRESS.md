@@ -1,6 +1,6 @@
 # Current Status
 
-Current Phase: 本地 v0.2 评测原型 + 公共版发布准备
+Current Phase: Phase 2–3 本地评测原型 + 公共版发布准备
 Current Task: 题集、参考导入与报告验收；等待正式部署环境和官方参考样本
 Status: 本地功能可测，尚未公网部署；不能宣称模型身份已验证
 
